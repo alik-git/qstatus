@@ -1,0 +1,148 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mypackage"
+version = "0.1.0"
+description = "Minimal Python package template."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Your Name", email = "you@example.com" },
+]
+maintainers = [
+  { name = "Your Name", email = "you@example.com" },
+]
+keywords = ["python", "template", "package"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = [
+  "colorlog>=6.10",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2",
+  "mypy>=1.15",
+  "pre-commit>=4.0",
+  "pytest>=8.0",
+  "ruff>=0.11",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mypackage"]
+
+[project.scripts]
+mypackage = "mypackage.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/alik-git/python_package_template"
+Repository = "https://github.com/alik-git/python_package_template"
+Issues = "https://github.com/alik-git/python_package_template/issues"
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# This template uses a fairly strict Ruff setup by default. The less universal
+# rule families are marked below; comment them out if they are too noisy for a
+# new project.
+extend-select = [
+  # Core Python style and modernization.
+  "E",       # pycodestyle errors
+  "W",       # pycodestyle warnings
+  "I",       # import sorting
+  "UP",      # Python modernization
+  # Bug-risk checks.
+  "B",       # flake8-bugbear bug patterns
+  "BLE",     # blind except / bare except
+  "PLE",     # pylint errors
+  "PLW",     # pylint warnings
+  "S",       # Bandit security checks; comment out if too noisy.
+  # Maintainability checks.
+  "A",       # flake8-builtins: avoid shadowing id/list/input/etc.
+  "ARG",     # unused function arguments
+  "C4",      # cleaner comprehensions
+  "DTZ",     # timezone-aware datetimes
+  "FBT003",  # boolean positional values in function calls
+  "NPY",     # NumPy-specific checks
+  "PERF",    # performance footguns
+  "PTH",     # prefer pathlib over os.path
+  "RET",     # return control-flow simplification
+  "SIM",     # flake8-simplify
+  # Logging and import hygiene.
+  "G",       # logging format strings
+  "LOG",     # logging anti-patterns
+  "TC",      # type-checking import hygiene
+  # Strict docs/annotations/tests. Comment these out for a looser template.
+  "ANN201",  # public function return annotations
+  "ANN202",  # private function return annotations
+  "ANN204",  # special-method return annotations
+  "D100",    # module docstrings
+  "D104",    # package docstrings
+  "D102",    # public method docstrings
+  "D103",    # public function docstrings
+  "D2",      # docstring whitespace/placement conventions
+  "D4",      # docstring content conventions
+  "PT",      # pytest style
+  # Ruff suppression hygiene and narrow style correctness rules.
+  "RUF100",  # unused noqa
+  "RUF102",  # invalid noqa rule code
+  "RUF104",  # unmatched ruff suppression comments
+  "PLR0402", # prefer from-module imports for aliased submodule imports
+  "PLR1722", # prefer sys.exit() over the interactive exit() helper
+  "TRY203",  # useless try/except blocks that immediately re-raise
+]
+
+ignore = [
+  # typing.cast(SomeType, value) is clearer than quoted type names.
+  "TC006",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Do not flag assert statements in tests.
+"tests/**/*.py" = ["S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["mypackage"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src/mypackage"]
+
+# Type-check function bodies even before every function is fully annotated.
+check_untyped_defs = true
+no_implicit_optional = true
+strict_equality = true
+
+# High-signal warnings without full mypy strict mode.
+warn_redundant_casts = true
+warn_return_any = true
+warn_unreachable = true
+warn_unused_configs = true
+warn_unused_ignores = true
+
+# Missing packages still fail as import-not-found. This only suppresses the
+# weaker "installed but has no stubs/py.typed marker" error for third-party
+# packages.
+ignore_missing_imports = false
+follow_imports = "silent"
+disable_error_code = ["import-untyped"]
+
+# Make local and CI output easier to read and easier to suppress precisely.
+show_error_codes = true
+pretty = true
