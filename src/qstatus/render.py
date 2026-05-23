@@ -11,34 +11,15 @@ if TYPE_CHECKING:
 
 _RESET = "\033[0m"
 _BOLD = "\033[1m"
-_RED = "\033[38;5;167m"
-_GREEN = "\033[38;5;114m"
-_AMBER = "\033[38;5;179m"
-_MUTED_TEAL = "\033[38;5;73m"
-_MUTED_PURPLE = "\033[38;5;141m"
-_MUTED_ROSE = "\033[38;5;175m"
-_MUTED_GREEN = "\033[38;5;108m"
-_MUTED_ORANGE = "\033[38;5;173m"
-_MUTED_YELLOW = "\033[38;5;178m"
-_MUTED_BLUE = "\033[38;5;109m"
-_NUMBER = "\033[38;5;215m"
-
-_LABEL_COLORS = {
-    "REPO": _MUTED_TEAL,
-    "BRANCH": _MUTED_PURPLE,
-    "STATE": _MUTED_YELLOW,
-    "REMOTE": _MUTED_GREEN,
-    "SUBMODULES": _MUTED_BLUE,
-    "PR": _MUTED_ROSE,
-    "CI": _MUTED_ORANGE,
-    "RELEASE": _MUTED_TEAL,
-    "COMMIT": _MUTED_PURPLE,
-    "WORKTREES": _MUTED_GREEN,
-    "DIFF": _MUTED_YELLOW,
-    "CACHED_DIFF": _MUTED_ORANGE,
-    "GITHUB_ERROR": _RED,
-    "CMD": _MUTED_BLUE,
-}
+_RED = "\033[38;2;224;108;117m"
+_GREEN = "\033[38;2;152;195;121m"
+_AMBER = "\033[38;2;229;192;123m"
+_BLUE = "\033[38;2;97;175;239m"
+_PURPLE = "\033[38;2;198;120;221m"
+_COMMENT_GREEN = "\033[38;2;161;216;183m"
+_VARIABLE = "\033[38;2;223;223;223m"
+_MUTED = "\033[38;2;171;178;191m"
+_NUMBER = "\033[38;2;209;154;102m"
 
 
 def render_json(snapshot: RepoSnapshot, *, verbose: bool = False) -> str:
@@ -68,12 +49,12 @@ def render_human(
 
     lines = [
         (
-            f"{_label('REPO', color)} {_value(snapshot.repo.name, color)} "
-            f"{snapshot.repo.root}"
+            f"{_label('REPO', color)} {_name(snapshot.repo.name, color)} "
+            f"{_variable(snapshot.repo.root, color)}"
         ),
         (
-            f"{_label('BRANCH', color)} {_value(branch.head, color)} "
-            f"{commit} {upstream} "
+            f"{_label('BRANCH', color)} {_name(branch.head, color)} "
+            f"{_muted(commit, color)} {_muted(upstream, color)} "
             f"{_state(branch.sync_state, color)} "
             f"{_kv('ahead', branch.ahead, color)} "
             f"{_kv('behind', branch.behind, color)}"
@@ -98,7 +79,7 @@ def render_human(
         )
         release_name = release.tag or release.version or "unknown"
         lines.append(
-            f"{_label('RELEASE', color)} {_value(release_name, color)} "
+            f"{_label('RELEASE', color)} {_name(release_name, color)} "
             f"exists={_state(exists, color)}",
         )
     if verbose:
@@ -141,7 +122,7 @@ def _format_remote(remote: RemoteInfo | None, *, color: bool) -> str:
     if remote is None:
         return _state("none", color)
     url = remote.fetch_url or remote.push_url or "unknown-url"
-    return f"{_value(remote.name, color)} {url}"
+    return f"{_name(remote.name, color)} {_variable(url, color)}"
 
 
 def _format_submodules(submodules: SubmoduleSummary, *, color: bool) -> str:
@@ -175,7 +156,10 @@ def _format_pr(snapshot: RepoSnapshot, *, color: bool) -> str:
         return _state("none", color)
     pr = github.pull_request
     draft = " draft" if pr.is_draft else ""
-    return f"{_value(f'#{pr.number}{draft}', color)} {_state(pr.state, color)} {pr.url}"
+    return (
+        f"{_name(f'#{pr.number}{draft}', color)} {_state(pr.state, color)} "
+        f"{_variable(pr.url, color)}"
+    )
 
 
 def _format_ci(snapshot: RepoSnapshot, *, color: bool) -> str:
@@ -199,11 +183,19 @@ def _format_ci(snapshot: RepoSnapshot, *, color: bool) -> str:
 
 
 def _label(value: str, color: bool) -> str:
-    return _style(value, color, _BOLD, _LABEL_COLORS.get(value, _MUTED_TEAL))
-
-
-def _value(value: str, color: bool) -> str:
     return _style(value, color, _BOLD)
+
+
+def _name(value: str, color: bool) -> str:
+    return _style(value, color, _BOLD, _BLUE)
+
+
+def _variable(value: str, color: bool) -> str:
+    return _style(value, color, _VARIABLE)
+
+
+def _muted(value: str, color: bool) -> str:
+    return _style(value, color, _MUTED)
 
 
 def _state(value: str, color: bool) -> str:
@@ -228,7 +220,6 @@ def _state(value: str, color: bool) -> str:
         "skipped",
         "mixed",
         "unknown",
-        "not-requested",
     }:
         return _style(value, color, _AMBER)
     if value in {
@@ -241,9 +232,9 @@ def _state(value: str, color: bool) -> str:
     }:
         return _style(value, color, _RED)
     if value == "detached":
-        return _style(value, color, _MUTED_ROSE)
-    if value == "no_upstream":
-        return _style(value, color, _MUTED_BLUE)
+        return _style(value, color, _PURPLE)
+    if value in {"no-upstream", "no_upstream", "not-requested"}:
+        return _style(value, color, _COMMENT_GREEN)
     return value
 
 

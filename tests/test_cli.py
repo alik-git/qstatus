@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 def test_cli_version(capsys: pytest.CaptureFixture[str]) -> None:
     """Print package version."""
     assert main(["--version"]) == 0
-    assert capsys.readouterr().out.strip() == "qstatus 0.3.1"
+    assert capsys.readouterr().out.strip() == "qstatus 0.3.2"
 
 
 def test_cli_repo_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
