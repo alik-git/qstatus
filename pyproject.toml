@@ -3,28 +3,29 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mypackage"
+name = "qstatus"
 version = "0.1.0"
-description = "Minimal Python package template."
+description = "Quick local status snapshots for developer workspaces."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
-  { name = "Your Name", email = "you@example.com" },
+  { name = "Ali K", email = "alikgithb@gmail.com" },
 ]
 maintainers = [
-  { name = "Your Name", email = "you@example.com" },
+  { name = "Ali K", email = "alikgithb@gmail.com" },
 ]
-keywords = ["python", "template", "package"]
+keywords = ["cli", "developer-tools", "git", "status"]
 classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Typing :: Typed",
 ]
-dependencies = [
-  "colorlog>=6.10",
-]
+dependencies = []
 
 [project.optional-dependencies]
 dev = [
@@ -36,15 +37,15 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/mypackage"]
+packages = ["src/qstatus"]
 
 [project.scripts]
-mypackage = "mypackage.cli:main"
+qstatus = "qstatus.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/alik-git/python_package_template"
-Repository = "https://github.com/alik-git/python_package_template"
-Issues = "https://github.com/alik-git/python_package_template/issues"
+Homepage = "https://github.com/alik-git/qstatus"
+Repository = "https://github.com/alik-git/qstatus"
+Issues = "https://github.com/alik-git/qstatus/issues"
 
 [tool.ruff]
 line-length = 88
@@ -112,7 +113,7 @@ ignore = [
 "tests/**/*.py" = ["S101"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["mypackage"]
+known-first-party = ["qstatus"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -122,7 +123,7 @@ docstring-code-format = true
 
 [tool.mypy]
 python_version = "3.11"
-files = ["src/mypackage"]
+files = ["src/qstatus"]
 
 # Type-check function bodies even before every function is fully annotated.
 check_untyped_defs = true

@@ -1,15 +1,15 @@
 # API
 
-Document the package's public Python API here.
-
-## `do_useful_thing`
+`qstatus` currently exposes package metadata and a small CLI entry point.
 
 ```python
-import mypackage
+import qstatus
 
-result = mypackage.do_useful_thing("world")
+print(qstatus.__version__)
 ```
 
-`do_useful_thing` is the starter public function exposed by this template.
-Replace it with the functions or classes that should make up the package's
-public API.
+The command-line entry point is:
+
+```bash
+qstatus
+```

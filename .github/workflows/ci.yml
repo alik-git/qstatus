@@ -104,7 +104,7 @@ jobs:
         run: python -m pip install --force-reinstall dist/*.whl
 
       - name: Smoke test installed package
-        run: python -c "import mypackage; print(mypackage.do_useful_thing())"
+        run: python -c "import qstatus; print(qstatus.__version__)"
 
   package-uv:
     name: Package Build (uv)
@@ -134,4 +134,4 @@ jobs:
         run: uv pip install --force-reinstall dist/*.whl
 
       - name: Smoke test installed package
-        run: uv run python -c "import mypackage; print(mypackage.do_useful_thing())"
+        run: uv run --no-sync python -c "import qstatus; print(qstatus.__version__)"

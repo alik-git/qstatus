@@ -1,11 +1,11 @@
 # AGENTS.md
 
-Repo-specific instructions for agents working with the `mypackage` package.
+Repo-specific instructions for agents working with the `qstatus` package.
 
 ## Package Conventions
 
-- Keep importable package code under `src/mypackage/`.
-- Put CLI entrypoint behavior in `src/mypackage/cli.py`.
+- Keep importable package code under `src/qstatus/`.
+- Put CLI entrypoint behavior in `src/qstatus/cli.py`.
 
 ## Validation
 
