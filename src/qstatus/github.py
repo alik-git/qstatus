@@ -105,20 +105,49 @@ def _collect_pull_request(
         ],
     )
     if not result.ok:
-        return _collect_pull_request_from_list(gh, repo, branch.head)
+        return _collect_pull_request_from_status(gh, repo, branch.head)
     data = _loads_object(result.stdout)
     if data is None:
-        return _collect_pull_request_from_list(gh, repo, branch.head)
-    return PullRequestInfo(
-        number=int(data.get("number", 0)),
-        title=str(data.get("title") or ""),
-        url=str(data.get("url") or ""),
-        state=str(data.get("state") or "UNKNOWN").lower(),
-        is_draft=bool(data.get("isDraft")),
-        base_ref=_optional_str(data.get("baseRefName")),
-        head_ref=_optional_str(data.get("headRefName")),
-        review_decision=_optional_str(data.get("reviewDecision")),
+        return _collect_pull_request_from_status(gh, repo, branch.head)
+    return _pull_request_from_mapping(data)
+
+
+def _collect_pull_request_from_status(
+    gh,
+    repo: str,
+    branch_name: str,
+) -> PullRequestInfo | None:
+    result = gh(
+        [
+            "pr",
+            "status",
+            "--repo",
+            repo,
+            "--json",
+            "number,title,url,state,isDraft,baseRefName,headRefName,reviewDecision",
+        ],
     )
+    if result.ok:
+        data = _loads_object(result.stdout)
+        if data is not None:
+            pull_request = _pull_request_from_status_data(data, branch_name)
+            if pull_request is not None:
+                return pull_request
+    return _collect_pull_request_from_list(gh, repo, branch_name)
+
+
+def _pull_request_from_status_data(
+    data: dict[str, Any],
+    branch_name: str,
+) -> PullRequestInfo | None:
+    for value in data.values():
+        if isinstance(value, dict) and value.get("headRefName") == branch_name:
+            return _pull_request_from_mapping(value)
+        if isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict) and item.get("headRefName") == branch_name:
+                    return _pull_request_from_mapping(item)
+    return None
 
 
 def _collect_pull_request_from_list(
@@ -148,6 +177,10 @@ def _collect_pull_request_from_list(
     if not items:
         return None
     data = items[0]
+    return _pull_request_from_mapping(data)
+
+
+def _pull_request_from_mapping(data: dict[str, Any]) -> PullRequestInfo:
     return PullRequestInfo(
         number=int(data.get("number", 0)),
         title=str(data.get("title") or ""),

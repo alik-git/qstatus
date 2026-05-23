@@ -128,11 +128,11 @@ def test_collect_github_context_with_fake_gh(
     assert len(commands) == 4
 
 
-def test_collect_github_context_falls_back_to_pr_list(
+def test_collect_github_context_falls_back_to_pr_status(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Find a branch PR through a structured list fallback."""
+    """Find a branch PR through the structured status fallback."""
     branch = BranchState(
         head="feature",
         oid="abcdef1234567890",
@@ -154,22 +154,25 @@ def test_collect_github_context_falls_back_to_pr_list(
             return _ok(args, "{}")
         if args[:3] == ["gh", "pr", "view"]:
             return _fail(args, "no pull requests found")
-        if args[:3] == ["gh", "pr", "list"]:
+        if args[:3] == ["gh", "pr", "status"]:
             return _ok(
                 args,
                 json.dumps(
-                    [
-                        {
-                            "number": 7,
-                            "title": "Fallback PR",
-                            "url": "https://github.com/alik-git/qstatus/pull/7",
-                            "state": "OPEN",
-                            "isDraft": True,
-                            "baseRefName": "main",
-                            "headRefName": "feature",
-                            "reviewDecision": "",
-                        },
-                    ],
+                    {
+                        "createdBy": [
+                            {
+                                "number": 7,
+                                "title": "Fallback PR",
+                                "url": "https://github.com/alik-git/qstatus/pull/7",
+                                "state": "OPEN",
+                                "isDraft": True,
+                                "baseRefName": "main",
+                                "headRefName": "feature",
+                                "reviewDecision": "",
+                            },
+                        ],
+                        "needsReview": [],
+                    }
                 ),
             )
         if args[:3] == ["gh", "pr", "checks"]:
@@ -189,6 +192,71 @@ def test_collect_github_context_falls_back_to_pr_list(
     assert context.pr_state == "draft"
     assert context.pull_request is not None
     assert context.pull_request.number == 7
+
+
+def test_collect_github_context_falls_back_to_pr_list(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fall back to a branch PR list when status has no branch match."""
+    branch = BranchState(
+        head="feature",
+        oid="abcdef1234567890",
+        short_oid="abcdef1",
+        upstream="origin/feature",
+        ahead=0,
+        behind=0,
+        sync_state="synced",
+    )
+
+    def fake_run_command(
+        args: list[str],
+        *,
+        cwd: pathlib.Path,
+        timeout_s: float,
+    ) -> CommandResult:
+        del cwd, timeout_s
+        if args[:3] == ["gh", "auth", "status"]:
+            return _ok(args, "{}")
+        if args[:3] == ["gh", "pr", "view"]:
+            return _fail(args, "no pull requests found")
+        if args[:3] == ["gh", "pr", "status"]:
+            return _ok(args, json.dumps({"createdBy": [], "needsReview": []}))
+        if args[:3] == ["gh", "pr", "list"]:
+            return _ok(
+                args,
+                json.dumps(
+                    [
+                        {
+                            "number": 8,
+                            "title": "List fallback PR",
+                            "url": "https://github.com/alik-git/qstatus/pull/8",
+                            "state": "OPEN",
+                            "isDraft": False,
+                            "baseRefName": "main",
+                            "headRefName": "feature",
+                            "reviewDecision": "",
+                        },
+                    ]
+                ),
+            )
+        if args[:3] == ["gh", "pr", "checks"]:
+            return _ok(args, json.dumps([]))
+        if args[:3] == ["gh", "release", "view"]:
+            return _fail(args, "release not found")
+        raise AssertionError(args)
+
+    monkeypatch.setattr("qstatus.github.run_command", fake_run_command)
+
+    context, _commands = collect_github_context(
+        repo="alik-git/qstatus",
+        branch=branch,
+        root=tmp_path,
+    )
+
+    assert context.pr_state == "open"
+    assert context.pull_request is not None
+    assert context.pull_request.number == 8
 
 
 def test_collect_github_context_reports_missing_gh(
