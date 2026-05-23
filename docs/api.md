@@ -15,6 +15,8 @@ qstatus
 qstatus repo
 qstatus repo --json
 qstatus repo --github
+qstatus repo --plain
+qstatus repo --color=auto
 ```
 
 `qstatus` is an alias for `qstatus repo`. The default command only reads local
@@ -67,3 +69,10 @@ offline errors, or rate limits do not fail the local snapshot. They produce
 
 The tool reports facts only. It does not emit readiness labels or next-action
 recommendations.
+
+## Color
+
+Human output uses ANSI color by default only when stdout is an interactive
+terminal. `--json` is never colorized. `--plain` and `--color=never` force plain
+human output, while `--color=always` forces ANSI color. Auto color honors
+`NO_COLOR` and disables color when `TERM=dumb`.

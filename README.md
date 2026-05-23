@@ -25,6 +25,8 @@ qstatus repo --json
 qstatus repo --github
 qstatus repo --cwd /path/to/repo
 qstatus repo --verbose
+qstatus repo --plain
+qstatus repo --color=always
 qstatus --version
 ```
 
@@ -63,6 +65,18 @@ still succeeds and the GitHub section is marked unavailable.
 
 `qstatus` reports facts and neutral summaries only. It intentionally does not
 decide whether a repo is ready to commit, push, merge, or release.
+
+Human output uses color automatically when stdout is an interactive terminal.
+Machine-readable JSON is never colorized. To control ANSI color explicitly:
+
+```bash
+qstatus repo --plain        # no ANSI color
+qstatus repo --color=never  # no ANSI color
+qstatus repo --color=always # force ANSI color
+```
+
+`--plain` overrides `--color`. Automatic color also honors the standard
+`NO_COLOR` environment variable and disables color when `TERM=dumb`.
 
 ## Development
 

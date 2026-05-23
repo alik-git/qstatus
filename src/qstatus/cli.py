@@ -4,15 +4,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from dataclasses import replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from qstatus import __version__
 from qstatus.git_snapshot import RepoSnapshotError, collect_repo_snapshot
 from qstatus.github import collect_github_context
 from qstatus.models import RepoSummary
 from qstatus.render import render_human, render_json
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 def build_repo_parser(prog: str = "qstatus") -> argparse.ArgumentParser:
@@ -26,6 +31,17 @@ def build_repo_parser(prog: str = "qstatus") -> argparse.ArgumentParser:
         action="store_true",
         dest="json_output",
         help="emit stable JSON instead of human-readable text",
+    )
+    parser.add_argument(
+        "--plain",
+        action="store_true",
+        help="disable ANSI color in human-readable output",
+    )
+    parser.add_argument(
+        "--color",
+        choices=("auto", "always", "never"),
+        default="auto",
+        help="control ANSI color in human-readable output",
     )
     parser.add_argument(
         "--github",
@@ -102,8 +118,32 @@ def main(argv: list[str] | None = None) -> int:
     if args.json_output:
         print(render_json(snapshot, verbose=args.verbose))
     else:
-        print(render_human(snapshot, verbose=args.verbose))
+        color = _should_colorize(
+            args.color,
+            plain=args.plain,
+            stream=sys.stdout,
+        )
+        print(render_human(snapshot, verbose=args.verbose, color=color))
     return 0
+
+
+def _should_colorize(
+    color_mode: str,
+    *,
+    plain: bool,
+    stream: object,
+    env: Mapping[str, str] | None = None,
+) -> bool:
+    """Return true when human output should include ANSI color."""
+    if plain or color_mode == "never":
+        return False
+    if color_mode == "always":
+        return True
+    actual_env = os.environ if env is None else env
+    if "NO_COLOR" in actual_env or actual_env.get("TERM") == "dumb":
+        return False
+    isatty = getattr(stream, "isatty", None)
+    return bool(isatty()) if callable(isatty) else False
 
 
 if __name__ == "__main__":
