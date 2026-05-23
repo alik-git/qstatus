@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 def test_cli_version(capsys: pytest.CaptureFixture[str]) -> None:
     """Print package version."""
     assert main(["--version"]) == 0
-    assert capsys.readouterr().out.strip() == "qstatus 0.3.0"
+    assert capsys.readouterr().out.strip() == "qstatus 0.3.1"
 
 
 def test_cli_repo_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -88,7 +88,10 @@ def test_cli_human_output_can_force_color(
 
     assert main(["--cwd", str(repo), "--color", "always"]) == 0
 
-    assert "\033[" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "\033[" in output
+    assert "\033[2m" not in output
+    assert "ahead=\033[" in output
 
 
 def test_cli_plain_overrides_forced_color(
