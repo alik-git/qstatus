@@ -20,8 +20,49 @@ python -m pip install -e ".[dev]"
 
 ```bash
 qstatus
+qstatus repo
+qstatus repo --json
+qstatus repo --github
+qstatus repo --cwd /path/to/repo
+qstatus repo --verbose
 qstatus --version
 ```
+
+`qstatus` is an alias for `qstatus repo`. By default it performs a fast local
+Git snapshot only. It does not fetch, push, pull, run tests, run builds, or call
+network services.
+
+Example human output:
+
+```text
+REPO qstatus /home/ali/Projects/qstatus
+BRANCH main 6acc81f origin/main synced ahead=0 behind=0
+STATE clean staged=0 unstaged=0 untracked=0 conflicts=0 stash=0
+REMOTE origin git@github.com:alik-git/qstatus.git
+SUBMODULES none
+PR not-requested
+CI not-requested
+```
+
+Use `--json` when another tool or agent should consume the snapshot:
+
+```bash
+qstatus repo --json
+```
+
+Use `--github` only when you want read-only GitHub context through the `gh` CLI:
+
+```bash
+qstatus repo --github
+qstatus repo --json --github
+```
+
+GitHub mode reports PR, CI/check, and package-release facts when available. If
+`gh` is missing, unauthenticated, offline, or rate-limited, the local snapshot
+still succeeds and the GitHub section is marked unavailable.
+
+`qstatus` reports facts and neutral summaries only. It intentionally does not
+decide whether a repo is ready to commit, push, merge, or release.
 
 ## Development
 
