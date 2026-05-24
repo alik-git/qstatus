@@ -2,8 +2,6 @@
 
 Quick local status snapshots for developer workspaces.
 
-https://github.com/user-attachments/assets/a8baa40f-912b-4086-a6bc-755f8dbd501a
-
 ## Installation
 
 Recommended with `uv`:
