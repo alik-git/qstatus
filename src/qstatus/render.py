@@ -38,16 +38,28 @@ def render_human(
     color: bool = False,
 ) -> str:
     """Render a compact human-readable repo snapshot."""
+    lines = [
+        *render_human_local_lines(snapshot, color=color),
+        *render_human_github_lines(snapshot, color=color),
+    ]
+    if verbose:
+        lines.extend(render_human_verbose_lines(snapshot, color=color))
+    return "\n".join(lines)
+
+
+def render_human_local_lines(
+    snapshot: RepoSnapshot, *, color: bool = False
+) -> list[str]:
+    """Render local Git facts that are available before optional GitHub calls."""
     branch = snapshot.branch
     changes = snapshot.changes
-    github = snapshot.github
     submodules = snapshot.submodules
     remote = _origin_or_first_remote(snapshot)
     upstream = branch.upstream or "no-upstream"
     commit = branch.short_oid or "no-commit"
     stash = changes.stash_count if changes.stash_count is not None else "unknown"
 
-    lines = [
+    return [
         (
             f"{_label('REPO', color)} {_name(snapshot.repo.name, color)} "
             f"{_variable(snapshot.repo.root, color)}"
@@ -69,6 +81,17 @@ def render_human(
         ),
         f"{_label('REMOTE', color)} {_format_remote(remote, color=color)}",
         f"{_label('SUBMODULES', color)} {_format_submodules(submodules, color=color)}",
+    ]
+
+
+def render_human_github_lines(
+    snapshot: RepoSnapshot,
+    *,
+    color: bool = False,
+) -> list[str]:
+    """Render optional GitHub facts after GitHub context is available."""
+    github = snapshot.github
+    lines = [
         f"{_label('PR', color)} {_format_pr(snapshot, color=color)}",
         f"{_label('CI', color)} {_format_ci(snapshot, color=color)}",
     ]
@@ -82,33 +105,40 @@ def render_human(
             f"{_label('RELEASE', color)} {_name(release_name, color)} "
             f"exists={_state(exists, color)}",
         )
-    if verbose:
-        if branch.commit_subject:
-            lines.append(f"{_label('COMMIT', color)} {branch.commit_subject}")
-        worktree_count = _kv("count", snapshot.worktree.count, color)
+    return lines
+
+
+def render_human_verbose_lines(
+    snapshot: RepoSnapshot,
+    *,
+    color: bool = False,
+) -> list[str]:
+    """Render extra debug evidence after the main local/GitHub summary."""
+    branch = snapshot.branch
+    changes = snapshot.changes
+    lines: list[str] = []
+    if branch.commit_subject:
+        lines.append(f"{_label('COMMIT', color)} {branch.commit_subject}")
+    worktree_count = _kv("count", snapshot.worktree.count, color)
+    lines.append(f"{_label('WORKTREES', color)} {worktree_count}")
+    if changes.diff_shortstat:
+        lines.append(f"{_label('DIFF', color)} {changes.diff_shortstat}")
+    if changes.cached_diff_shortstat:
+        lines.append(f"{_label('CACHED_DIFF', color)} {changes.cached_diff_shortstat}")
+    if snapshot.github.error:
+        lines.append(f"{_label('GITHUB_ERROR', color)} {snapshot.github.error}")
+    for command in snapshot.commands:
+        if command.timed_out:
+            status: int | str | None = "timeout"
+        elif command.unavailable:
+            status = "unavailable"
+        else:
+            status = command.exit_code
         lines.append(
-            f"{_label('WORKTREES', color)} {worktree_count}",
+            f"{_label('CMD', color)} {_state(str(status), color)} "
+            f"{' '.join(command.args)}",
         )
-        if changes.diff_shortstat:
-            lines.append(f"{_label('DIFF', color)} {changes.diff_shortstat}")
-        if changes.cached_diff_shortstat:
-            lines.append(
-                f"{_label('CACHED_DIFF', color)} {changes.cached_diff_shortstat}",
-            )
-        if snapshot.github.error:
-            lines.append(f"{_label('GITHUB_ERROR', color)} {snapshot.github.error}")
-        for command in snapshot.commands:
-            if command.timed_out:
-                status: int | str | None = "timeout"
-            elif command.unavailable:
-                status = "unavailable"
-            else:
-                status = command.exit_code
-            lines.append(
-                f"{_label('CMD', color)} {_state(str(status), color)} "
-                f"{' '.join(command.args)}",
-            )
-    return "\n".join(lines)
+    return lines
 
 
 def _origin_or_first_remote(snapshot: RepoSnapshot) -> RemoteInfo | None:

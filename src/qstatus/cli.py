@@ -14,7 +14,13 @@ from qstatus import __version__
 from qstatus.git_snapshot import RepoSnapshotError, collect_repo_snapshot
 from qstatus.github import collect_github_context
 from qstatus.models import RepoSummary
-from qstatus.render import render_human, render_json
+from qstatus.render import (
+    render_human,
+    render_human_github_lines,
+    render_human_local_lines,
+    render_human_verbose_lines,
+    render_json,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -95,6 +101,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"qstatus: {exc}", file=sys.stderr)
         return 2
 
+    color = _should_colorize(
+        args.color,
+        plain=args.plain,
+        stream=sys.stdout,
+    )
+    if args.github and not args.json_output:
+        _print_lines(render_human_local_lines(snapshot, color=color), flush=True)
+
     if args.github:
         github, github_commands = collect_github_context(
             repo=snapshot.repo.github_repo,
@@ -117,14 +131,20 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.json_output:
         print(render_json(snapshot, verbose=args.verbose))
+    elif args.github:
+        _print_lines(render_human_github_lines(snapshot, color=color))
+        if args.verbose:
+            _print_lines(render_human_verbose_lines(snapshot, color=color))
     else:
-        color = _should_colorize(
-            args.color,
-            plain=args.plain,
-            stream=sys.stdout,
-        )
         print(render_human(snapshot, verbose=args.verbose, color=color))
     return 0
+
+
+def _print_lines(lines: list[str], *, flush: bool = False) -> None:
+    """Print pre-rendered human lines, optionally flushing for progressive output."""
+    if not lines:
+        return
+    print("\n".join(lines), flush=flush)
 
 
 def _should_colorize(

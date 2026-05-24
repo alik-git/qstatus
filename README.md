@@ -63,6 +63,10 @@ GitHub mode reports PR, CI/check, and package-release facts when available. If
 `gh` is missing, unauthenticated, offline, or rate-limited, the local snapshot
 still succeeds and the GitHub section is marked unavailable.
 
+For human output, `--github` prints and flushes the local Git facts before
+running GitHub checks, then appends PR, CI, and release facts when they are
+ready. JSON output remains a single complete object printed at the end.
+
 `qstatus` reports facts and neutral summaries only. It intentionally does not
 decide whether a repo is ready to commit, push, merge, or release.
 

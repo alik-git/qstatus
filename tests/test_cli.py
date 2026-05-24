@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import qstatus.cli
 from qstatus.cli import _should_colorize, main
 from qstatus.commands import run_command
+from qstatus.models import GitHubContext, RemoteCheckSummary
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -17,7 +19,7 @@ if TYPE_CHECKING:
 def test_cli_version(capsys: pytest.CaptureFixture[str]) -> None:
     """Print package version."""
     assert main(["--version"]) == 0
-    assert capsys.readouterr().out.strip() == "qstatus 0.3.2"
+    assert capsys.readouterr().out.strip() == "qstatus 0.3.3"
 
 
 def test_cli_repo_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -132,6 +134,50 @@ def test_cli_json_never_emits_color(
     output = capsys.readouterr().out
     assert "\033[" not in output
     assert json.loads(output)["schema_version"] == "qstatus_repo_snapshot_v1"
+
+
+def test_cli_github_human_prints_local_section_before_github(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Human GitHub mode should stream local repo facts before gh calls finish."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "config", "user.name", "Test User")
+    _git(repo, "config", "user.email", "test@example.com")
+    (repo / "README.md").write_text("# Test\n")
+    _git(repo, "add", "README.md")
+    _git(repo, "commit", "-m", "initial")
+
+    local_output_seen = ""
+
+    def fake_collect_github_context(**_kwargs: object) -> tuple[GitHubContext, list]:
+        nonlocal local_output_seen
+        local_output_seen = capsys.readouterr().out
+        return (
+            GitHubContext(
+                status="ok",
+                pr_state="none",
+                checks=RemoteCheckSummary(state="success", total=1, success=1),
+            ),
+            [],
+        )
+
+    monkeypatch.setattr(
+        qstatus.cli,
+        "collect_github_context",
+        fake_collect_github_context,
+    )
+
+    assert main(["--cwd", str(repo), "--github", "--plain"]) == 0
+
+    github_output = capsys.readouterr().out
+    assert "REPO repo " in local_output_seen
+    assert "STATE clean" in local_output_seen
+    assert "PR " not in local_output_seen
+    assert "CI success" in github_output
 
 
 def test_should_colorize_auto_respects_terminal_and_env() -> None:
