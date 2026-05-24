@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 
 SCHEMA_VERSION = "qstatus_repo_snapshot_v1"
+ENV_SCHEMA_VERSION = "qstatus_env_snapshot_v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,6 +18,107 @@ class CommandRecord:
     timed_out: bool = False
     unavailable: bool = False
     stderr: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ToolFact:
+    """Availability and version facts for one optional executable."""
+
+    name: str
+    available: bool
+    path: str | None = None
+    realpath: str | None = None
+    version: str | None = None
+    status: str = "not_found"
+    error: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ShellState:
+    """Selected shell environment facts relevant to Python environment layering."""
+
+    cwd: str
+    kind: str
+    conda_active: bool
+    conda_default_env: str | None = None
+    conda_prefix: str | None = None
+    conda_shlvl: str | None = None
+    virtual_env: str | None = None
+    venv_active: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class PythonRuntimeInfo:
+    """The Python runtime that is currently executing qstatus."""
+
+    executable: str
+    version: str
+    implementation: str
+    prefix: str
+    base_prefix: str
+    venv_like: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectEnvironment:
+    """Project-local environment files and Python project metadata."""
+
+    cwd: str
+    root: str
+    root_source: str
+    name: str
+    pyproject_path: str | None = None
+    pyproject_name: str | None = None
+    requires_python: str | None = None
+    pyproject_status: str = "missing"
+    pyproject_error: str | None = None
+    uv_lock: bool = False
+    requirements_txt: bool = False
+    python_version_file: bool = False
+    environment_yml: bool = False
+    conda_lock_yml: bool = False
+    venv_path: str | None = None
+    venv_exists: bool = False
+    venv_python_exists: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class DevpyProject:
+    """Facts parsed from a project's devpy.toml file."""
+
+    present: bool
+    path: str | None = None
+    status: str = "missing"
+    error: str | None = None
+    base_conda_env: str | None = None
+    venv_path: str | None = None
+    venv_exists: bool = False
+    venv_python_exists: bool = False
+    editable_count: int = 0
+    editable_paths: list[str] = field(default_factory=list)
+    install_deps: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class EnvSnapshot:
+    """Full qstatus environment snapshot."""
+
+    schema_version: str
+    shell: ShellState
+    runtime: PythonRuntimeInfo
+    python_commands: dict[str, ToolFact]
+    project: ProjectEnvironment
+    devpy: DevpyProject
+    tools: dict[str, ToolFact]
+    hints: dict[str, list[str]] = field(default_factory=dict)
+    commands: list[CommandRecord] = field(default_factory=list)
+
+    def to_dict(self, *, include_commands: bool = False) -> dict[str, object]:
+        """Convert the environment snapshot into stable JSON."""
+        payload = asdict(self)
+        if not include_commands:
+            payload.pop("commands", None)
+        return payload
 
 
 @dataclass(frozen=True, slots=True)

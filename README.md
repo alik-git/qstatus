@@ -26,7 +26,11 @@ qstatus repo --github
 qstatus repo --cwd /path/to/repo
 qstatus repo --verbose
 qstatus repo --plain
+qstatus repo --non-compact
 qstatus repo --color=always
+qstatus env
+qstatus env --cwd /path/to/project
+qstatus env --json
 qstatus --version
 ```
 
@@ -45,6 +49,9 @@ SUBMODULES none
 PR not-requested
 CI not-requested
 ```
+
+Repo output is compact by default. Use `--non-compact` when you want the
+sectioned human summary.
 
 Use `--json` when another tool or agent should consume the snapshot:
 
@@ -81,6 +88,74 @@ qstatus repo --color=always # force ANSI color
 
 `--plain` overrides `--color`. Automatic color also honors the standard
 `NO_COLOR` environment variable and disables color when `TERM=dumb`.
+
+## Environment Snapshots
+
+Use `qstatus env` to inspect Python, conda, venv, devpy, uv, and py_runner facts
+without activating or modifying anything:
+
+```bash
+qstatus env
+qstatus env --cwd ~/Projects/motion_data_processing_worktree1
+qstatus env --show-all
+qstatus env --show-tools --show-hints
+qstatus env --abs-paths
+qstatus env --compact
+qstatus env --json
+qstatus env --verbose
+```
+
+Example for a normal Python project:
+
+```text
+SHELL
+  cwd  ~/Projects/qstatus
+  kind=neutral  conda=none  venv=none
+PYTHON
+  runtime  ~/.local/share/uv/tools/qstatus/bin/python3
+  python   missing
+  python3  /usr/bin/python3
+  version=3.14.4  venv_like=yes
+PROJECT
+  root  ~/Projects/qstatus
+  pyproject=ok  uv.lock=yes  devpy=no  .venv=yes
+```
+
+Example for a `devpy`-backed worktree:
+
+```text
+PROJECT
+  root  ~/Projects/motion_data_processing_worktree1
+  name=motion-data-processing  pyproject=ok  uv.lock=yes  devpy=yes  .venv=yes
+DEVPY
+  venv  ~/Projects/motion_data_processing_worktree1/.venv
+  base=mdp_shared  status=ok  venv_python=yes  editables=3
+```
+
+Use `--show-all`, `--show-tools`, `--show-hints`, or `--show-home` when you need
+those extra sections:
+
+```text
+TOOLS
+  uv  ~/.local/bin/uv
+  conda  ~/miniconda3/condabin/conda
+  devpy  ~/.local/bin/devpy
+  py_runner  ~/.agent_files/py_runner/run
+HINTS devpy_python=devpy python
+      py_runner_overlay:
+        ~/.agent_files/py_runner/run \
+          --env mdp_shared \
+          --python .venv/bin/python
+```
+
+`qstatus env` treats tools like `python`, `python3`, `pip`, `conda`, `devpy`,
+`uv`, and `py_runner` as optional facts. Missing tools are reported as missing
+instead of crashing the command. Human output compacts home-relative paths with
+`~`; pass `--abs-paths` when exact absolute paths are more useful. Default env
+collection is path-based and avoids slow `--version` subprocesses; use
+`--verbose` when you want those command records and version probes. `qstatus
+repo` still requires `git`, but reports a missing Git executable directly
+instead of confusing it with a non-repository path.
 
 ## Development
 

@@ -49,6 +49,8 @@ def collect_repo_snapshot(
         return result
 
     root_result = git(["rev-parse", "--show-toplevel"])
+    if root_result.unavailable:
+        raise RepoSnapshotError("git is not installed or not on PATH")
     if not root_result.ok:
         detail = root_result.stderr.strip() or root_result.stdout.strip()
         raise RepoSnapshotError(f"not a git worktree: {cwd} ({detail})")
