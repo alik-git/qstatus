@@ -161,6 +161,13 @@ instead of confusing it with a non-repository path.
 
 ## Development
 
+Read these docs first when changing the package:
+
+- [Repo Overview](docs/repo_overview.md): mental model, public surface, module
+  ownership, and design rules
+- [API](docs/api.md): command surface, JSON schemas, exit codes, GitHub mode,
+  and env snapshot behavior
+
 Run the standard checks before opening a PR:
 
 ```bash

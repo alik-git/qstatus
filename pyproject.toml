@@ -53,9 +53,8 @@ target-version = "py311"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-# This template uses a fairly strict Ruff setup by default. The less universal
-# rule families are marked below; comment them out if they are too noisy for a
-# new project.
+# qstatus keeps a fairly strict Ruff setup because the package is small and is
+# intended to stay simple enough for humans and agents to inspect quickly.
 extend-select = [
   # Core Python style and modernization.
   "E",       # pycodestyle errors
@@ -83,7 +82,7 @@ extend-select = [
   "G",       # logging format strings
   "LOG",     # logging anti-patterns
   "TC",      # type-checking import hygiene
-  # Strict docs/annotations/tests. Comment these out for a looser template.
+  # Strict docs/annotations/tests.
   "ANN201",  # public function return annotations
   "ANN202",  # private function return annotations
   "ANN204",  # special-method return annotations
