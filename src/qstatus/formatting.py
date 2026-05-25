@@ -58,6 +58,7 @@ def state(value: str, color: bool) -> str:
         "none",
         "0",
         "active",
+        "current",
         "git",
         "ok",
     }:
@@ -79,6 +80,9 @@ def state(value: str, color: bool) -> str:
         "neutral",
         "cwd",
         "marker",
+        "prunable",
+        "bare",
+        "partial",
     }:
         return _style(value, color, _AMBER)
     if value in {

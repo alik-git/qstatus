@@ -113,13 +113,8 @@ def _summary_line(snapshot: CiSnapshot, *, color: bool) -> str:
     if summary is None:
         return f"{fmt.label('CHECKS', color)} {fmt.state('unknown', color)}"
     label = "CHECKS" if snapshot.checks else "RUNS"
-    state = (
-        "stale-success"
-        if summary.ci_state == "success" and summary.currentness == "stale"
-        else summary.ci_state
-    )
     return (
-        f"{fmt.label(label, color)} {fmt.state(state, color)} "
+        f"{fmt.label(label, color)} {fmt.state(summary.ci_state, color)} "
         f"{fmt.kv('total', summary.total_checks, color)} "
         f"{fmt.kv('pass', summary.pass_count, color)} "
         f"{fmt.kv('fail', summary.fail_count, color)} "
@@ -127,7 +122,8 @@ def _summary_line(snapshot: CiSnapshot, *, color: bool) -> str:
         f"{fmt.kv('running', summary.running_count, color)} "
         f"{fmt.kv('skipped', summary.skipped_count, color)} "
         f"{fmt.kv('cancel', summary.cancel_count, color)} "
-        f"{fmt.kv('unknown', summary.unknown_count, color)}"
+        f"{fmt.kv('unknown', summary.unknown_count, color)} "
+        f"applies_to_head={fmt.state(_applies_to_head(summary.currentness), color)}"
     )
 
 
@@ -191,3 +187,11 @@ def _display_bucket(bucket: str) -> str:
         "cancel": "cancelled",
         "skipping": "skipped",
     }.get(bucket, bucket)
+
+
+def _applies_to_head(currentness: str) -> str:
+    if currentness == "current":
+        return "yes"
+    if currentness == "stale":
+        return "no"
+    return "unknown"

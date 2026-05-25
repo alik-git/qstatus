@@ -180,6 +180,7 @@ class WorktreeEntry:
     bare: bool = False
     detached: bool = False
     prunable: bool = False
+    is_current: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,6 +190,27 @@ class WorktreeState:
     current_path: str
     worktrees: list[WorktreeEntry]
     count: int
+
+
+@dataclass(frozen=True, slots=True)
+class StashEntry:
+    """Bounded facts for one Git stash entry."""
+
+    ref: str
+    index: int | None
+    subject: str
+    branch: str | None = None
+    file_count: int | None = None
+    detail_status: str = "not_requested"
+
+
+@dataclass(frozen=True, slots=True)
+class StashState:
+    """Repo-family stash inventory details."""
+
+    count: int | None
+    detail_status: str = "not_requested"
+    entries: list[StashEntry] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -275,6 +297,7 @@ class RepoSnapshot:
     branch: BranchState
     changes: ChangeSummary
     worktree: WorktreeState
+    stashes: StashState
     submodules: SubmoduleSummary
     github: GitHubContext
     summary: RepoSummary

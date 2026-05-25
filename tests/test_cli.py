@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import pytest
+
 import qstatus.cli
 import qstatus.git_snapshot
 from qstatus.cli import _should_colorize, main
@@ -14,13 +16,25 @@ from qstatus.models import GitHubContext, RemoteCheckSummary
 if TYPE_CHECKING:
     from pathlib import Path
 
-    import pytest
-
 
 def test_cli_version(capsys: pytest.CaptureFixture[str]) -> None:
     """Print package version."""
     assert main(["--version"]) == 0
     assert capsys.readouterr().out.strip() == "qstatus 0.4.0"
+
+
+def test_cli_help_lists_commands(capsys: pytest.CaptureFixture[str]) -> None:
+    """Top-level help should show the repo/env/ci command surface."""
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--help"])
+
+    assert exc_info.value.code == 0
+    output = capsys.readouterr().out
+    assert "Commands:" in output
+    assert "qstatus [repo]" in output
+    assert "qstatus env" in output
+    assert "qstatus ci" in output
+    assert "qstatus repo --worktrees" in output
 
 
 def test_cli_repo_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -41,6 +55,34 @@ def test_cli_repo_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> No
     assert payload["repo"]["root"] == str(repo)
     assert payload["summary"]["worktree_state"] == "clean"
     assert payload["github"]["status"] == "not_requested"
+    assert payload["worktree"]["worktrees"][0]["is_current"] is True
+    assert payload["stashes"]["detail_status"] == "not_requested"
+
+
+def test_cli_repo_json_can_include_stash_entries(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Repo JSON includes bounded stash detail only when requested."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "config", "user.name", "Test User")
+    _git(repo, "config", "user.email", "test@example.com")
+    (repo / "README.md").write_text("# Test\n")
+    _git(repo, "add", "README.md")
+    _git(repo, "commit", "-m", "initial")
+    (repo / "README.md").write_text("# Test\n\nWIP\n")
+    _git(repo, "stash", "push", "-m", "wip before moving worktree")
+
+    assert main(["repo", "--cwd", str(repo), "--json", "--stashes"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["changes"]["stash_count"] == 1
+    assert payload["stashes"]["detail_status"] == "available"
+    assert payload["stashes"]["entries"][0]["ref"] == "stash@{0}"
+    assert payload["stashes"]["entries"][0]["file_count"] == 1
+    assert "wip before moving worktree" in payload["stashes"]["entries"][0]["subject"]
 
 
 def test_cli_non_repo_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -248,6 +290,133 @@ def test_cli_human_non_compact_output_uses_sectioned_format(
     assert "  name=repo" in output
     assert "STATE\n" in output
     assert "worktree=clean" in output
+
+
+def test_cli_repo_worktrees_lists_linked_worktrees(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--worktrees shows the repo-family map without changing default output."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "config", "user.name", "Test User")
+    _git(repo, "config", "user.email", "test@example.com")
+    (repo / "README.md").write_text("# Test\n")
+    _git(repo, "add", "README.md")
+    _git(repo, "commit", "-m", "initial")
+    linked = tmp_path / "linked"
+    _git(repo, "worktree", "add", "-b", "feature", str(linked))
+
+    assert main(["repo", "--cwd", str(linked), "--plain"]) == 0
+    default_output = capsys.readouterr().out
+    assert "WORKTREES" not in default_output
+
+    assert main(["repo", "--cwd", str(linked), "--plain", "--worktrees"]) == 0
+    output = capsys.readouterr().out
+    assert "WORKTREES count=2" in output
+    assert str(repo) in output
+    assert str(linked) in output
+    assert "feature" in output
+    assert "current" in output
+
+
+def test_cli_repo_worktrees_github_streams_local_section(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """--worktrees should be part of the local stream before GitHub calls."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "config", "user.name", "Test User")
+    _git(repo, "config", "user.email", "test@example.com")
+    (repo / "README.md").write_text("# Test\n")
+    _git(repo, "add", "README.md")
+    _git(repo, "commit", "-m", "initial")
+
+    local_output_seen = ""
+
+    def fake_collect_github_context(**_kwargs: object) -> tuple[GitHubContext, list]:
+        nonlocal local_output_seen
+        local_output_seen = capsys.readouterr().out
+        return (
+            GitHubContext(
+                status="ok",
+                pr_state="none",
+                checks=RemoteCheckSummary(state="success", total=1, success=1),
+            ),
+            [],
+        )
+
+    monkeypatch.setattr(
+        qstatus.cli,
+        "collect_github_context",
+        fake_collect_github_context,
+    )
+
+    assert main(["repo", "--cwd", str(repo), "--github", "--plain", "--worktrees"]) == 0
+
+    capsys.readouterr()
+    assert "WORKTREES count=1" in local_output_seen
+    assert "PR " not in local_output_seen
+
+
+def test_cli_repo_stashes_are_bounded_and_explicit(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--stashes shows bounded stash inventory without making it default."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "config", "user.name", "Test User")
+    _git(repo, "config", "user.email", "test@example.com")
+    (repo / "README.md").write_text("# Test\n")
+    _git(repo, "add", "README.md")
+    _git(repo, "commit", "-m", "initial")
+    (repo / "README.md").write_text("# Test\n\none\n")
+    _git(repo, "stash", "push", "-m", "first stash")
+    (repo / "README.md").write_text("# Test\n\ntwo\n")
+    _git(repo, "stash", "push", "-m", "second stash")
+
+    assert main(["repo", "--cwd", str(repo), "--plain"]) == 0
+    default_output = capsys.readouterr().out
+    assert "STASHES" not in default_output
+    assert "stash=2" in default_output
+
+    assert (
+        main(
+            [
+                "repo",
+                "--cwd",
+                str(repo),
+                "--plain",
+                "--stashes",
+                "--stash-limit",
+                "1",
+            ],
+        )
+        == 0
+    )
+    output = capsys.readouterr().out
+    assert "STASHES count=2 detail=available" in output
+    assert "stash@{0}" in output
+    assert "stash@{1}" not in output
+    assert "second stash" in output
+
+
+def test_cli_repo_rejects_negative_stash_limit(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Stash detail limits should stay bounded."""
+    with pytest.raises(SystemExit) as exc_info:
+        main(["repo", "--cwd", str(tmp_path), "--stashes", "--stash-limit", "-1"])
+
+    assert exc_info.value.code == 2
+    assert "--stash-limit must be non-negative" in capsys.readouterr().err
 
 
 def test_cli_human_output_can_force_color(

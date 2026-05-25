@@ -30,11 +30,47 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 
+_REPO_HELP_EPILOG = """\
+Commands:
+  qstatus [repo]       local Git/repo status
+  qstatus env          Python, conda, venv, devpy, and tool status
+  qstatus ci           detailed read-only GitHub CI status
+
+Examples:
+  qstatus repo --worktrees
+  qstatus repo --stashes --stash-limit 5
+  qstatus repo --github
+  qstatus env --show-all
+  qstatus ci --log-tail 40
+
+Run `qstatus env --help` or `qstatus ci --help` for command-specific options.
+"""
+
+
+_ENV_HELP_EPILOG = """\
+Examples:
+  qstatus env
+  qstatus env --compact
+  qstatus env --show-tools --show-hints
+  qstatus env --json
+"""
+
+
+_CI_HELP_EPILOG = """\
+Examples:
+  qstatus ci
+  qstatus ci --json
+  qstatus ci --log-tail 40
+"""
+
+
 def build_repo_parser(prog: str = "qstatus") -> argparse.ArgumentParser:
     """Build the qstatus repo command-line parser."""
     parser = argparse.ArgumentParser(
         prog=prog,
         description="Print a quick local repository status snapshot.",
+        epilog=_REPO_HELP_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--json",
@@ -74,6 +110,22 @@ def build_repo_parser(prog: str = "qstatus") -> argparse.ArgumentParser:
         action="store_true",
         help="use the sectioned human-readable repo summary",
     )
+    parser.add_argument(
+        "--worktrees",
+        action="store_true",
+        help="show linked worktrees for this repo family",
+    )
+    parser.add_argument(
+        "--stashes",
+        action="store_true",
+        help="show bounded stash details for this repo family",
+    )
+    parser.add_argument(
+        "--stash-limit",
+        type=int,
+        default=5,
+        help="maximum stash entries to show with --stashes",
+    )
     return parser
 
 
@@ -82,6 +134,8 @@ def build_env_parser(prog: str = "qstatus env") -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=prog,
         description="Print a quick Python and project environment snapshot.",
+        epilog=_ENV_HELP_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--json",
@@ -149,6 +203,8 @@ def build_ci_parser(prog: str = "qstatus ci") -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=prog,
         description="Print a read-only GitHub CI status snapshot.",
+        epilog=_CI_HELP_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--json",
@@ -281,12 +337,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     repo_compact = not args.non_compact
+    if args.stash_limit < 0:
+        parser.error("--stash-limit must be non-negative")
 
     try:
         repo_snapshot = collect_repo_snapshot(
             cwd,
             include_github=args.github,
             include_commands=args.verbose,
+            include_stashes=args.stashes,
+            stash_limit=args.stash_limit,
         )
     except RepoSnapshotError as exc:
         if args.json_output:
@@ -311,6 +371,8 @@ def main(argv: list[str] | None = None) -> int:
                 repo_snapshot,
                 color=color,
                 compact=repo_compact,
+                show_worktrees=args.worktrees,
+                show_stashes=args.stashes,
             ),
             flush=True,
         )
@@ -360,6 +422,8 @@ def main(argv: list[str] | None = None) -> int:
                 verbose=args.verbose,
                 color=color,
                 compact=repo_compact,
+                show_worktrees=args.worktrees,
+                show_stashes=args.stashes,
             ),
         )
     return 0
