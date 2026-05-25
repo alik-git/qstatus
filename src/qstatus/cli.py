@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from qstatus import __version__
+from qstatus.ci_render import render_ci_human, render_ci_json
+from qstatus.ci_snapshot import collect_ci_snapshot, validate_log_tail
 from qstatus.env_render import render_env_human, render_env_json
 from qstatus.env_snapshot import collect_env_snapshot
 from qstatus.git_snapshot import RepoSnapshotError, collect_repo_snapshot
@@ -142,6 +144,51 @@ def build_env_parser(prog: str = "qstatus env") -> argparse.ArgumentParser:
     return parser
 
 
+def build_ci_parser(prog: str = "qstatus ci") -> argparse.ArgumentParser:
+    """Build the qstatus ci command-line parser."""
+    parser = argparse.ArgumentParser(
+        prog=prog,
+        description="Print a read-only GitHub CI status snapshot.",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="emit stable JSON instead of human-readable text",
+    )
+    parser.add_argument(
+        "--plain",
+        action="store_true",
+        help="disable ANSI color in human-readable output",
+    )
+    parser.add_argument(
+        "--color",
+        choices=("auto", "always", "never"),
+        default="auto",
+        help="control ANSI color in human-readable output",
+    )
+    parser.add_argument(
+        "--cwd",
+        type=Path,
+        default=Path.cwd(),
+        help="repo directory to inspect",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="include extra evidence such as command records",
+    )
+    parser.add_argument(
+        "--log-tail",
+        type=int,
+        nargs="?",
+        const=40,
+        default=None,
+        help="print the last N non-empty lines from failed GitHub Actions logs",
+    )
+    return parser
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the qstatus command-line interface."""
     args_list = list(sys.argv[1:] if argv is None else argv)
@@ -158,11 +205,53 @@ def main(argv: list[str] | None = None) -> int:
         prog = "qstatus env"
         command = "env"
         args_list = args_list[1:]
+    elif args_list[:1] == ["ci"]:
+        prog = "qstatus ci"
+        command = "ci"
+        args_list = args_list[1:]
 
-    parser = build_env_parser(prog) if command == "env" else build_repo_parser(prog)
+    if command == "env":
+        parser = build_env_parser(prog)
+    elif command == "ci":
+        parser = build_ci_parser(prog)
+    else:
+        parser = build_repo_parser(prog)
     args = parser.parse_args(args_list)
 
     cwd = args.cwd.expanduser().resolve()
+    if command == "ci":
+        try:
+            log_tail = validate_log_tail(args.log_tail)
+        except ValueError as exc:
+            parser.error(str(exc))
+        try:
+            ci_snapshot = collect_ci_snapshot(
+                cwd,
+                include_commands=args.verbose,
+                log_tail=log_tail,
+            )
+        except RepoSnapshotError as exc:
+            if args.json_output:
+                print(
+                    json.dumps(
+                        {"error": str(exc), "schema_version": "qstatus_error_v1"},
+                        sort_keys=True,
+                    ),
+                )
+            else:
+                print(f"qstatus: {exc}", file=sys.stderr)
+            return 2
+        color = _should_colorize(
+            args.color,
+            plain=args.plain,
+            stream=sys.stdout,
+        )
+        if args.json_output:
+            print(render_ci_json(ci_snapshot, verbose=args.verbose))
+        else:
+            print(render_ci_human(ci_snapshot, verbose=args.verbose, color=color))
+        return 0
+
     if command == "env":
         env_snapshot = collect_env_snapshot(
             cwd,
