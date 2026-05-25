@@ -1,9 +1,10 @@
 # API
 
-`qstatus` exposes one package metadata value and two read-only CLI snapshots:
+`qstatus` exposes one package metadata value and three read-only CLI snapshots:
 
 - `qstatus repo`: local Git facts, with optional GitHub enrichment
 - `qstatus env`: Python/project environment facts
+- `qstatus ci`: deeper GitHub CI facts for the current branch or PR
 
 ```python
 import qstatus
@@ -23,6 +24,9 @@ qstatus env
 qstatus env --json
 qstatus env --compact
 qstatus env --show-all
+qstatus ci
+qstatus ci --json
+qstatus ci --log-tail 40
 qstatus --version
 ```
 
@@ -32,6 +36,9 @@ local Git state. It does not fetch, mutate refs, run workflows, or call GitHub.
 `qstatus env` inspects the active shell, Python runtime, project markers,
 optional `devpy` config, and common tools. It does not activate environments,
 install packages, or modify the project.
+
+`qstatus ci` composes local Git facts with read-only `gh` calls. It does not
+fetch, push, rerun, cancel, watch, or open browser windows.
 
 ## Repo Snapshot
 
@@ -103,6 +110,59 @@ one-line-per-section summary. Optional sections are hidden by default; use
 Default env collection is path-based and avoids slow `--version` subprocesses.
 Use `--verbose` for command evidence records and version probes.
 
+## CI Snapshot
+
+`qstatus ci --json` emits a stable object with:
+
+```json
+{
+  "schema_version": "qstatus_ci_snapshot_v1",
+  "repo": {},
+  "branch": {},
+  "changes": {},
+  "github": {},
+  "pull_request": {},
+  "commits": {},
+  "currentness": {},
+  "checks": [],
+  "runs": [],
+  "jobs": [],
+  "log_tails": [],
+  "summary": {},
+  "source_errors": []
+}
+```
+
+Top-level sections:
+
+- `repo`: root path, git dir, repo name, remotes, and detected GitHub repo
+- `branch`: current branch, local HEAD, upstream, and sync facts
+- `changes`: local worktree cleanliness so green CI is not confused with
+  uncommitted local changes
+- `github`: `gh` availability/auth status and selected GitHub repo
+- `pull_request`: current branch PR facts when a PR exists
+- `commits`: local, PR, upstream tracking, and expected SHA comparisons
+- `currentness`: whether the CI evidence applies to the expected SHA
+- `checks`: PR check rows from `gh pr checks`
+- `runs`: GitHub Actions run rows from `gh run list`
+- `jobs`: failed job rows for failed current runs
+- `log_tails`: optional bounded failed-log tails when `--log-tail` is set
+- `summary`: aggregate currentness and check/run buckets
+- `source_errors`: bounded source-specific GitHub errors
+
+Currentness values:
+
+- `current`: local HEAD matches the PR head, or a no-PR run exists for local
+  HEAD
+- `stale`: local HEAD differs from the PR head, or the latest branch run is for
+  a different SHA than expected
+- `absent`: no run exists for the expected SHA
+- `unknown`: GitHub data is unavailable or conflicting
+
+`qstatus ci` exits `0` when it produces a snapshot, even if CI is failing,
+stale, absent, cancelled, or unavailable. It exits `2` for local repo
+inspection or CLI argument failures.
+
 ## JSON And Verbose Evidence
 
 JSON output is intended for tools and agents. Human formatting choices,
@@ -114,9 +174,10 @@ Command evidence is omitted by default.
 ## Exit Codes
 
 - `0`: the snapshot command succeeded, even if the repo is dirty, ahead, behind,
-  missing optional env tools, or has failing remote checks.
-- `2`: `qstatus repo` could not inspect the requested path as a Git worktree or
-  could not run Git.
+  missing optional env tools, or has failing, stale, absent, or unavailable
+  remote checks.
+- `2`: the requested repo command could not inspect the path as a Git worktree,
+  could not run Git, or received invalid CLI arguments.
 
 ## GitHub Mode
 

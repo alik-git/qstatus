@@ -31,6 +31,10 @@ qstatus repo --color=always
 qstatus env
 qstatus env --cwd /path/to/project
 qstatus env --json
+qstatus ci
+qstatus ci --json
+qstatus ci --cwd /path/to/repo
+qstatus ci --log-tail 40
 qstatus --version
 ```
 
@@ -76,6 +80,41 @@ ready. JSON output remains a single complete object printed at the end.
 
 `qstatus` reports facts and neutral summaries only. It intentionally does not
 decide whether a repo is ready to commit, push, merge, or release.
+
+## CI Snapshots
+
+Use `qstatus ci` when you need the deeper GitHub CI facts behind a branch or
+PR:
+
+```bash
+qstatus ci
+qstatus ci --cwd ~/Projects/worksets/devpy_work/devpy-runner
+qstatus ci --json
+qstatus ci --verbose
+qstatus ci --log-tail 40
+```
+
+`qstatus ci` is read-only. It does not fetch, push, rerun workflows, cancel
+runs, or open a browser. It reports local `HEAD`, worktree cleanliness, the
+current PR when one exists, expected SHA, current/stale/absent CI evidence,
+check buckets, workflow run URLs, and failed job URLs.
+
+Example no-PR output:
+
+```text
+CI qstatus alik-git/qstatus
+BRANCH main local=4955870 upstream=origin/main synced
+STATE clean staged=0 unstaged=0 untracked=0 conflicts=0
+PR none
+CURRENT current expected=4955870 checked=4955870 source=run-list-commit reason=run-exists-for-expected-sha
+RUNS success total=1 pass=1 fail=0 pending=0 running=0 skipped=0 cancel=0 unknown=0
+RUN Checks success id=26352434014 sha=4955870 currentness=current url=https://github.com/alik-git/qstatus/actions/runs/26352434014
+```
+
+`--log-tail N` is intentionally simple and opt-in. For failed current GitHub
+Actions runs, it prints the last `N` non-empty lines from `gh run view
+--log-failed`. If log fetching is unavailable, the snapshot still succeeds and
+prints `LOG unavailable`.
 
 Human output uses color automatically when stdout is an interactive terminal.
 Machine-readable JSON is never colorized. To control ANSI color explicitly:
