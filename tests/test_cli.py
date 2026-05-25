@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 def test_cli_version(capsys: pytest.CaptureFixture[str]) -> None:
     """Print package version."""
     assert main(["--version"]) == 0
-    assert capsys.readouterr().out.strip() == "qstatus 0.4.0"
+    assert capsys.readouterr().out.strip() == "qstatus 0.5.0"
 
 
 def test_cli_help_lists_commands(capsys: pytest.CaptureFixture[str]) -> None:
