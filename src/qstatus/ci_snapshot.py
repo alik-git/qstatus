@@ -773,7 +773,8 @@ def _summarize(
     *,
     failing_jobs: int,
 ) -> CiSummary:
-    items = checks if checks else runs
+    current_runs = [run for run in runs if run.currentness == "current"]
+    items = checks if checks else current_runs or runs
     counts = {
         "pass": 0,
         "fail": 0,
@@ -786,7 +787,11 @@ def _summarize(
     for item in items:
         counts[item.bucket if item.bucket in counts else "unknown"] += 1
     state = _summary_state(counts, total=len(items))
-    failing_runs = sum(1 for run in runs if run.bucket in {"fail", "cancel"})
+    failing_runs = sum(
+        1
+        for run in runs
+        if run.currentness == "current" and run.bucket in {"fail", "cancel"}
+    )
     return CiSummary(
         ci_state=state,
         currentness=currentness,

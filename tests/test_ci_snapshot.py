@@ -256,6 +256,56 @@ def test_ci_cancelled_run_renders_cancelled(
     assert "RUN Checks cancelled" in output
 
 
+def test_ci_summary_ignores_stale_runs_when_current_runs_exist(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Stale branch history should not decide the summary for current CI."""
+    repo = _repo(tmp_path, remote=True, branch="main")
+    head = _git(repo, "rev-parse", "HEAD")
+
+    monkeypatch.setattr(
+        qstatus.ci_snapshot,
+        "run_command",
+        _fake_gh(
+            head=head,
+            pr_head=None,
+            pr_checks=[],
+            runs=[
+                {
+                    "databaseId": 108,
+                    "workflowName": "Checks",
+                    "status": "in_progress",
+                    "conclusion": "",
+                    "headSha": head,
+                    "createdAt": "2026-05-25T20:00:00Z",
+                    "url": "https://github.com/alik-git/qstatus/actions/runs/108",
+                },
+                {
+                    "databaseId": 109,
+                    "workflowName": "Checks",
+                    "status": "completed",
+                    "conclusion": "cancelled",
+                    "headSha": "a" * 40,
+                    "createdAt": "2026-05-25T19:00:00Z",
+                    "url": "https://github.com/alik-git/qstatus/actions/runs/109",
+                },
+            ],
+        ),
+    )
+
+    snapshot = qstatus.ci_snapshot.collect_ci_snapshot(repo)
+    output = render_ci_human(snapshot)
+
+    assert snapshot.summary is not None
+    assert snapshot.summary.ci_state == "running"
+    assert snapshot.summary.total_checks == 1
+    assert snapshot.summary.cancel_count == 0
+    assert "RUNS running" in output
+    assert "RUN Checks running" in output
+    assert "RUN Checks cancelled" in output
+
+
 def test_ci_pr_check_buckets_are_counted(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
