@@ -8,7 +8,13 @@ from typing import TYPE_CHECKING
 from qstatus import formatting as fmt
 
 if TYPE_CHECKING:
-    from qstatus.models import RemoteInfo, RepoSnapshot, SubmoduleSummary
+    from qstatus.models import (
+        RemoteInfo,
+        RepoSnapshot,
+        StashEntry,
+        SubmoduleSummary,
+        WorktreeEntry,
+    )
 
 
 def render_repo_json(snapshot: RepoSnapshot, *, verbose: bool = False) -> str:
@@ -26,10 +32,18 @@ def render_repo_human(
     verbose: bool = False,
     color: bool = False,
     compact: bool = True,
+    show_worktrees: bool = False,
+    show_stashes: bool = False,
 ) -> str:
     """Render a human-readable repo snapshot."""
     lines = [
-        *render_repo_local_lines(snapshot, color=color, compact=compact),
+        *render_repo_local_lines(
+            snapshot,
+            color=color,
+            compact=compact,
+            show_worktrees=show_worktrees,
+            show_stashes=show_stashes,
+        ),
         *render_repo_github_lines(snapshot, color=color, compact=compact),
     ]
     if verbose:
@@ -40,11 +54,21 @@ def render_repo_human(
 
 
 def render_repo_local_lines(
-    snapshot: RepoSnapshot, *, color: bool = False, compact: bool = True
+    snapshot: RepoSnapshot,
+    *,
+    color: bool = False,
+    compact: bool = True,
+    show_worktrees: bool = False,
+    show_stashes: bool = False,
 ) -> list[str]:
     """Render local Git facts that are available before optional GitHub calls."""
     if compact:
-        return _render_repo_local_compact_lines(snapshot, color=color)
+        return _render_repo_local_compact_lines(
+            snapshot,
+            color=color,
+            show_worktrees=show_worktrees,
+            show_stashes=show_stashes,
+        )
 
     branch = snapshot.branch
     changes = snapshot.changes
@@ -52,7 +76,7 @@ def render_repo_local_lines(
     commit = branch.short_oid or "no-commit"
     stash = changes.stash_count if changes.stash_count is not None else "unknown"
 
-    return [
+    lines = [
         *fmt.hybrid_section(
             "REPO",
             path_rows=[("root", fmt.variable(snapshot.repo.root, color))],
@@ -88,6 +112,11 @@ def render_repo_local_lines(
         *_repo_remote_section(remote, color=color),
         *_repo_submodules_section(snapshot.submodules, color=color),
     ]
+    if show_worktrees:
+        lines.extend(_repo_worktree_lines(snapshot, color=color))
+    if show_stashes:
+        lines.extend(_repo_stash_lines(snapshot, color=color))
+    return lines
 
 
 def render_repo_github_lines(
@@ -169,7 +198,11 @@ def render_repo_verbose_lines(
 
 
 def _render_repo_local_compact_lines(
-    snapshot: RepoSnapshot, *, color: bool = False
+    snapshot: RepoSnapshot,
+    *,
+    color: bool = False,
+    show_worktrees: bool = False,
+    show_stashes: bool = False,
 ) -> list[str]:
     branch = snapshot.branch
     changes = snapshot.changes
@@ -178,7 +211,7 @@ def _render_repo_local_compact_lines(
     commit = branch.short_oid or "no-commit"
     stash = changes.stash_count if changes.stash_count is not None else "unknown"
 
-    return [
+    lines = [
         (
             f"{fmt.label('REPO', color)} {fmt.name(snapshot.repo.name, color)} "
             f"{fmt.variable(snapshot.repo.root, color)}"
@@ -204,6 +237,11 @@ def _render_repo_local_compact_lines(
             f"{_format_submodules(snapshot.submodules, color=color)}"
         ),
     ]
+    if show_worktrees:
+        lines.extend(_repo_worktree_lines(snapshot, color=color))
+    if show_stashes:
+        lines.extend(_repo_stash_lines(snapshot, color=color))
+    return lines
 
 
 def _render_repo_github_compact_lines(
@@ -253,6 +291,61 @@ def _render_repo_verbose_compact_lines(
             f"{fmt.label('CMD', color)} {fmt.state(str(status), color)} "
             f"{' '.join(command.args)}",
         )
+    return lines
+
+
+def _repo_worktree_lines(snapshot: RepoSnapshot, *, color: bool) -> list[str]:
+    worktree = snapshot.worktree
+    current = fmt.path(worktree.current_path, color, abs_paths=False)
+    lines = [
+        (
+            f"{fmt.label('WORKTREES', color)} "
+            f"{fmt.kv('count', worktree.count, color)} current={current}"
+        ),
+    ]
+    if not worktree.worktrees:
+        return lines
+
+    path_values = [fmt.compact_home(entry.path) for entry in worktree.worktrees]
+    branch_values = [_worktree_branch_label(entry) for entry in worktree.worktrees]
+    path_width = max(len(path) for path in path_values)
+    branch_width = max(len(branch) for branch in branch_values)
+
+    for entry, path_value, branch_value in zip(
+        worktree.worktrees,
+        path_values,
+        branch_values,
+        strict=True,
+    ):
+        flags = _worktree_flags(entry)
+        flag_text = " ".join(fmt.state(flag, color) for flag in flags)
+        head = (entry.head or "")[:7] or "-"
+        padding_after_path = " " * (path_width - len(path_value) + 2)
+        padding_after_branch = " " * (branch_width - len(branch_value) + 2)
+        line = (
+            f"  {fmt.variable(path_value, color)}{padding_after_path}"
+            f"{fmt.name(branch_value, color)}{padding_after_branch}"
+            f"{fmt.muted(head, color)}"
+        )
+        if flag_text:
+            line = f"{line} {flag_text}"
+        lines.append(line)
+    return lines
+
+
+def _repo_stash_lines(snapshot: RepoSnapshot, *, color: bool) -> list[str]:
+    stashes = snapshot.stashes
+    count = stashes.count if stashes.count is not None else "unknown"
+    lines = [
+        (
+            f"{fmt.label('STASHES', color)} "
+            f"{fmt.kv('count', count, color)} "
+            f"detail={fmt.state(stashes.detail_status, color)}"
+        ),
+    ]
+    lines.extend(
+        f"  {_format_stash_entry(entry, color=color)}" for entry in stashes.entries
+    )
     return lines
 
 
@@ -448,3 +541,40 @@ def _submodule_state(submodules: SubmoduleSummary) -> str:
 
 def _remote_url(remote: RemoteInfo, *, color: bool) -> str:
     return fmt.variable(remote.fetch_url or remote.push_url or "unknown-url", color)
+
+
+def _worktree_branch_label(entry: WorktreeEntry) -> str:
+    if entry.branch:
+        return entry.branch
+    if entry.detached:
+        return "detached"
+    if entry.bare:
+        return "bare"
+    return "unknown"
+
+
+def _worktree_flags(entry: WorktreeEntry) -> list[str]:
+    flags: list[str] = []
+    if entry.is_current:
+        flags.append("current")
+    if entry.prunable:
+        flags.append("prunable")
+    if entry.detached:
+        flags.append("detached")
+    if entry.bare:
+        flags.append("bare")
+    return flags
+
+
+def _format_stash_entry(entry: StashEntry, *, color: bool) -> str:
+    files = entry.file_count if entry.file_count is not None else "unknown"
+    parts = [
+        fmt.name(entry.ref, color),
+        f"branch={fmt.optional_value(entry.branch, color)}",
+        f"files={fmt.number(str(files), color)}",
+    ]
+    if entry.detail_status != "available":
+        parts.append(f"detail={fmt.state(entry.detail_status, color)}")
+    subject = entry.subject.replace('"', '\\"')
+    parts.append(f'subject="{fmt.variable(subject, color)}"')
+    return " ".join(parts)

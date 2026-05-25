@@ -120,7 +120,47 @@ def test_ci_stale_pr_success_renders_stale_success(
     output = render_ci_human(snapshot)
     assert "STATE clean" in output
     assert "CURRENT stale" in output
-    assert "CHECKS stale-success" in output
+    assert "CHECKS success" in output
+    assert "applies_to_head=no" in output
+
+
+def test_ci_stale_failure_marks_summary_as_not_applying_to_head(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale failure should be visibly different from current red CI."""
+    repo = _repo(tmp_path, remote=True, branch="main")
+    head = _git(repo, "rev-parse", "HEAD")
+
+    monkeypatch.setattr(
+        qstatus.ci_snapshot,
+        "run_command",
+        _fake_gh(
+            head=head,
+            pr_head=None,
+            pr_checks=[],
+            runs=[
+                {
+                    "databaseId": 110,
+                    "workflowName": "Checks",
+                    "status": "completed",
+                    "conclusion": "failure",
+                    "headSha": "a" * 40,
+                    "createdAt": "2026-05-25T19:00:00Z",
+                    "url": "https://github.com/alik-git/qstatus/actions/runs/110",
+                },
+            ],
+        ),
+    )
+
+    snapshot = qstatus.ci_snapshot.collect_ci_snapshot(repo)
+    output = render_ci_human(snapshot)
+
+    assert snapshot.currentness.state == "stale"
+    assert snapshot.summary is not None
+    assert snapshot.summary.ci_state == "failure"
+    assert "RUNS failure" in output
+    assert "applies_to_head=no" in output
 
 
 def test_ci_human_output_shows_dirty_worktree(
@@ -217,6 +257,7 @@ def test_ci_no_pr_without_expected_run_is_absent(
     assert snapshot.currentness.reason == "no-run-for-expected-sha"
     assert snapshot.summary is not None
     assert snapshot.summary.ci_state == "none"
+    assert "applies_to_head=unknown" in render_ci_human(snapshot)
 
 
 def test_ci_cancelled_run_renders_cancelled(
@@ -253,6 +294,7 @@ def test_ci_cancelled_run_renders_cancelled(
     assert snapshot.summary is not None
     assert snapshot.summary.ci_state == "cancelled"
     assert "RUNS cancelled" in output
+    assert "applies_to_head=yes" in output
     assert "RUN Checks cancelled" in output
 
 

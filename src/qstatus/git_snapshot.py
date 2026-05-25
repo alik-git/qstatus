@@ -16,6 +16,8 @@ from qstatus.models import (
     RepoIdentity,
     RepoSnapshot,
     RepoSummary,
+    StashEntry,
+    StashState,
     SubmoduleSummary,
     WorktreeEntry,
     WorktreeState,
@@ -38,6 +40,8 @@ def collect_repo_snapshot(
     *,
     include_github: bool = False,
     include_commands: bool = False,
+    include_stashes: bool = False,
+    stash_limit: int = 5,
 ) -> RepoSnapshot:
     """Collect a read-only local Git snapshot for a repository."""
     command_records: list[CommandRecord] = []
@@ -104,19 +108,33 @@ def collect_repo_snapshot(
     )
 
     worktree_result = git(["worktree", "list", "--porcelain"])
+    worktrees = (
+        parse_worktree_list(worktree_result.stdout) if worktree_result.ok else []
+    )
     worktree = WorktreeState(
         current_path=str(root),
-        worktrees=(
-            parse_worktree_list(worktree_result.stdout) if worktree_result.ok else []
-        ),
-        count=0,
-    )
-    worktree = WorktreeState(
-        current_path=worktree.current_path,
-        worktrees=worktree.worktrees,
-        count=len(worktree.worktrees),
+        worktrees=mark_current_worktree(worktrees, root),
+        count=len(worktrees),
     )
 
+    stashes = collect_stashes(
+        git,
+        stash_count=changes.stash_count,
+        include_details=include_stashes,
+        limit=stash_limit,
+    )
+    if stashes.count != changes.stash_count:
+        changes = ChangeSummary(
+            staged=changes.staged,
+            unstaged=changes.unstaged,
+            untracked=changes.untracked,
+            conflicted=changes.conflicted,
+            stash_count=stashes.count,
+            worktree_state=changes.worktree_state,
+            tracked_entries=changes.tracked_entries,
+            diff_shortstat=changes.diff_shortstat,
+            cached_diff_shortstat=changes.cached_diff_shortstat,
+        )
     submodules = collect_submodules(root, git)
     github_repo = github_repo_from_remotes(remotes)
     repo = RepoIdentity(
@@ -143,6 +161,7 @@ def collect_repo_snapshot(
         branch=branch,
         changes=changes,
         worktree=worktree,
+        stashes=stashes,
         submodules=submodules,
         github=github,
         summary=summary,
@@ -157,7 +176,7 @@ def parse_porcelain_v2(output: str) -> tuple[BranchState, ChangeSummary]:
     upstream: str | None = None
     ahead: int | None = None
     behind: int | None = None
-    stash_count: int | None = 0
+    stash_count: int | None = None
     staged = 0
     unstaged = 0
     untracked = 0
@@ -353,6 +372,74 @@ def parse_worktree_list(output: str) -> list[WorktreeEntry]:
     return entries
 
 
+def mark_current_worktree(
+    worktrees: list[WorktreeEntry],
+    current_path: Path,
+) -> list[WorktreeEntry]:
+    """Mark the current worktree entry from the resolved repo root."""
+    current = str(current_path.resolve())
+    return [
+        WorktreeEntry(
+            path=entry.path,
+            head=entry.head,
+            branch=entry.branch,
+            bare=entry.bare,
+            detached=entry.detached,
+            prunable=entry.prunable,
+            is_current=str(Path(entry.path).resolve()) == current,
+        )
+        for entry in worktrees
+    ]
+
+
+def collect_stashes(
+    git_runner,
+    *,
+    stash_count: int | None,
+    include_details: bool,
+    limit: int,
+) -> StashState:
+    """Collect bounded stash details only when explicitly requested."""
+    if not include_details and stash_count is not None:
+        return StashState(count=stash_count)
+
+    result = git_runner(["stash", "list", "--format=%gd%x1f%gs"], timeout_s=3.0)
+    if not result.ok:
+        return StashState(count=stash_count, detail_status="unavailable")
+
+    stash_lines = [line for line in result.stdout.splitlines() if line.strip()]
+    count = len(stash_lines)
+    if not include_details:
+        return StashState(count=count)
+    if limit <= 0:
+        return StashState(count=count, detail_status="available")
+
+    entries: list[StashEntry] = []
+    detail_status = "available"
+    for line in stash_lines[:limit]:
+        ref, _, subject = line.partition("\x1f")
+        if not ref:
+            continue
+        file_count, entry_status = _stash_file_count(git_runner, ref)
+        if entry_status != "available":
+            detail_status = "partial"
+        entries.append(
+            StashEntry(
+                ref=ref,
+                index=_stash_index(ref),
+                subject=subject,
+                branch=_stash_branch(subject),
+                file_count=file_count,
+                detail_status=entry_status,
+            ),
+        )
+    return StashState(
+        count=count,
+        detail_status=detail_status,
+        entries=entries,
+    )
+
+
 def collect_submodules(root: Path, git_runner) -> SubmoduleSummary:
     """Collect submodule summary only when `.gitmodules` exists."""
     if not (root / ".gitmodules").exists():
@@ -407,3 +494,21 @@ def _parse_int(value: str) -> int | None:
 
 def _short_branch(value: str) -> str:
     return value.removeprefix("refs/heads/")
+
+
+def _stash_file_count(git_runner, ref: str) -> tuple[int | None, str]:
+    result = git_runner(["stash", "show", "--name-only", ref], timeout_s=3.0)
+    if not result.ok:
+        return None, "unavailable"
+    files = [line for line in result.stdout.splitlines() if line.strip()]
+    return len(files), "available"
+
+
+def _stash_index(ref: str) -> int | None:
+    match = re.fullmatch(r"stash@\{(?P<index>\d+)\}", ref)
+    return int(match.group("index")) if match else None
+
+
+def _stash_branch(subject: str) -> str | None:
+    match = re.match(r"^(?:WIP on|On) (?P<branch>[^:]+):", subject)
+    return match.group("branch") if match else None

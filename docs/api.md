@@ -20,6 +20,8 @@ qstatus repo
 qstatus repo --json
 qstatus repo --github
 qstatus repo --non-compact
+qstatus repo --worktrees
+qstatus repo --stashes --stash-limit 5
 qstatus env
 qstatus env --json
 qstatus env --compact
@@ -51,6 +53,7 @@ fetch, push, rerun, cancel, watch, or open browser windows.
   "branch": {},
   "changes": {},
   "worktree": {},
+  "stashes": {},
   "submodules": {},
   "github": {},
   "summary": {}
@@ -64,7 +67,11 @@ Top-level sections:
   neutral sync state
 - `changes`: staged, unstaged, untracked, conflicted, stash, and shortstat
   counts
-- `worktree`: current worktree path and `git worktree list --porcelain` entries
+- `worktree`: current worktree path and `git worktree list --porcelain` entries;
+  entries include `is_current` so agents do not infer the current checkout from
+  path strings
+- `stashes`: repo-family stash count and optional bounded entries when
+  `--stashes` is requested
 - `submodules`: submodule presence and clean/changed/uninitialized/conflict
   counts
 - `github`: optional `--github` PR, check, and release facts
@@ -72,6 +79,16 @@ Top-level sections:
 
 Repo human output is compact by default. Use `--non-compact` for the sectioned
 human summary.
+
+`qstatus repo --worktrees` adds a human worktree section with path, branch,
+commit, and factual flags such as `current`, `detached`, `bare`, and
+`prunable`. It does not scan every worktree for dirt unless a future explicit
+flag adds that behavior.
+
+`qstatus repo --stashes` adds bounded stash detail rows. Use `--stash-limit N`
+to choose the maximum number of entries. Stash detail collection uses read-only
+stash-list/show commands and never applies, drops, pops, rewrites, or ranks
+stashes.
 
 ## Environment Snapshot
 
@@ -162,6 +179,9 @@ Currentness values:
 `qstatus ci` exits `0` when it produces a snapshot, even if CI is failing,
 stale, absent, cancelled, or unavailable. It exits `2` for local repo
 inspection or CLI argument failures.
+
+Human CI summaries include `applies_to_head=yes/no/unknown` so stale green or
+red runs are not confused with CI evidence for the current expected commit.
 
 ## JSON And Verbose Evidence
 

@@ -28,6 +28,8 @@ GitHub calls must stay explicit.
 - `qstatus` / `qstatus repo`: local Git status snapshot
 - `qstatus repo --github`: local Git facts plus read-only GitHub PR, CI, and
   release facts through `gh`
+- `qstatus repo --worktrees`: local Git facts plus linked worktree inventory
+- `qstatus repo --stashes`: local Git facts plus bounded stash inventory
 - `qstatus repo --json`: stable repo JSON
 - `qstatus env`: Python/project environment snapshot
 - `qstatus env --json`: stable environment JSON
@@ -58,6 +60,8 @@ Collectors own meaning. Renderers own presentation. The CLI should stay thin.
 - Default commands must stay read-only and fast.
 - GitHub, CI, and version probes are opt-in because they can be slow or
   unavailable.
+- Expanded repo-family inventories, such as linked worktrees and stash details,
+  are explicit flags. The default repo command stays compact.
 - Missing optional tools are facts, not crashes.
 - JSON is the stable machine contract; human output can evolve for readability.
 - Repo output is compact by default; env output is sectioned by default.
@@ -65,6 +69,8 @@ Collectors own meaning. Renderers own presentation. The CLI should stay thin.
   factual read-only diagnostic rather than a GitHub Actions control plane.
 - No readiness classifier belongs in qstatus. Callers can judge readiness from
   the facts.
+- Worktree and stash reporting must stay factual: no safe-to-delete labels, no
+  repair advice, and no mutation.
 
 ## Development Checks
 

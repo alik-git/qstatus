@@ -27,6 +27,8 @@ qstatus repo --cwd /path/to/repo
 qstatus repo --verbose
 qstatus repo --plain
 qstatus repo --non-compact
+qstatus repo --worktrees
+qstatus repo --stashes --stash-limit 5
 qstatus repo --color=always
 qstatus env
 qstatus env --cwd /path/to/project
@@ -56,6 +58,24 @@ CI not-requested
 
 Repo output is compact by default. Use `--non-compact` when you want the
 sectioned human summary.
+
+Use `--worktrees` when you want the linked worktree map for the current repo
+family:
+
+```bash
+qstatus repo --worktrees
+```
+
+Use `--stashes` when you need bounded stash details in addition to the normal
+stash count:
+
+```bash
+qstatus repo --stashes
+qstatus repo --stashes --stash-limit 10
+```
+
+These are read-only inventory flags. They do not create, prune, apply, drop, or
+repair anything.
 
 Use `--json` when another tool or agent should consume the snapshot:
 
@@ -107,7 +127,7 @@ BRANCH main local=4955870 upstream=origin/main synced
 STATE clean staged=0 unstaged=0 untracked=0 conflicts=0
 PR none
 CURRENT current expected=4955870 checked=4955870 source=run-list-commit reason=run-exists-for-expected-sha
-RUNS success total=1 pass=1 fail=0 pending=0 running=0 skipped=0 cancel=0 unknown=0
+RUNS success total=1 pass=1 fail=0 pending=0 running=0 skipped=0 cancel=0 unknown=0 applies_to_head=yes
 RUN Checks success id=26352434014 sha=4955870 currentness=current url=https://github.com/alik-git/qstatus/actions/runs/26352434014
 ```
 
