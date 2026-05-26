@@ -44,6 +44,16 @@ quick-status --version
 Git snapshot only. It does not fetch, push, pull, run tests, run builds, or call
 network services.
 
+For even quicker personal shell usage, add a local alias:
+
+```bash
+alias qs='quick-status'
+```
+
+The package installs the explicit `quick-status` command; `qs` is intentionally
+left as a shell-level shortcut so it cannot silently shadow another global
+command on machines where that name is already used.
+
 Example human output:
 
 ```text
