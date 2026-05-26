@@ -278,6 +278,13 @@ __quick_status_reminders_init() {
             return "$rc"
         }
     fi
+
+    case "__QUICK_STATUS_REMINDERS_CONTEXT__" in
+        codex)
+            export -f __quick_status_reminder_maybe_print
+            export -f git gh python python3 pip pip3 conda uv devpy which 2>/dev/null || true
+            ;;
+    esac
 }
 __quick_status_reminders_init
 unset -f __quick_status_reminders_init __quick_status_reminders_can_wrap
