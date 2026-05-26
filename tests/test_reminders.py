@@ -39,12 +39,38 @@ def test_reminders_init_bash_outputs_opt_in_shell(
     assert "QUICK_STATUS_REMINDERS" in output
 
 
+def test_reminders_init_bash_codex_context_outputs_codex_guards(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The Codex context should print guarded non-interactive Bash source."""
+    assert main(["reminders", "init", "bash", "--context", "codex"]) == 0
+
+    output = capsys.readouterr().out
+    assert "__quick_status_reminders_init()" in output
+    assert '[ -n "${CODEX_THREAD_ID:-}" ] || return 0' in output
+    assert '[ "${CODEX_CI:-}" = "1" ] || return 0' in output
+    assert '[ -n "${BASH_EXECUTION_STRING:-}" ] || return 0' in output
+    assert 'case "codex" in' in output
+    assert "__QUICK_STATUS_REMINDERS_CONTEXT__" not in output
+
+
 def test_reminders_rejects_unsupported_shell(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Unsupported shell integrations should fail through argparse."""
     with pytest.raises(SystemExit) as exc_info:
         main(["reminders", "init", "zsh"])
+
+    assert exc_info.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err
+
+
+def test_reminders_rejects_unsupported_context(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Unsupported reminder contexts should fail through argparse."""
+    with pytest.raises(SystemExit) as exc_info:
+        main(["reminders", "init", "bash", "--context", "ci"])
 
     assert exc_info.value.code == 2
     assert "invalid choice" in capsys.readouterr().err
@@ -59,6 +85,73 @@ def test_reminders_generated_source_skips_noninteractive_shell(tmp_path: Path) -
     )
 
     result = _run_bash_script(script, interactive=False)
+
+    assert result.returncode == 1
+    assert REMINDER not in result.stderr
+
+
+def test_reminders_codex_context_initializes_in_bash_c(tmp_path: Path) -> None:
+    """Codex mode should initialize in guarded non-interactive bash -c shells."""
+    repo = _init_repo(tmp_path)
+    hook = _write_hook(tmp_path, context="codex")
+
+    result = _run_bash_command(
+        f"source {shlex.quote(str(hook))}; "
+        f"cd {shlex.quote(str(repo))}; "
+        "git status --short --branch",
+        env={
+            "CODEX_CI": "1",
+            "CODEX_THREAD_ID": "test-thread",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "main" in result.stdout
+    assert f"{REMINDER} Try: quick-status repo --plain" in result.stderr
+
+
+def test_reminders_codex_context_requires_thread_id(tmp_path: Path) -> None:
+    """CODEX_CI alone should not be enough to initialize Codex reminders."""
+    hook = _write_hook(tmp_path, context="codex")
+
+    result = _run_bash_command(
+        f"source {shlex.quote(str(hook))}; declare -F git >/dev/null",
+        env={"CODEX_CI": "1"},
+    )
+
+    assert result.returncode == 1
+    assert REMINDER not in result.stderr
+
+
+def test_reminders_codex_context_requires_codex_ci(tmp_path: Path) -> None:
+    """CODEX_THREAD_ID alone should not be enough to initialize Codex reminders."""
+    hook = _write_hook(tmp_path, context="codex")
+
+    result = _run_bash_command(
+        f"source {shlex.quote(str(hook))}; declare -F git >/dev/null",
+        env={"CODEX_THREAD_ID": "test-thread"},
+    )
+
+    assert result.returncode == 1
+    assert REMINDER not in result.stderr
+
+
+def test_reminders_codex_context_skips_script_file_execution(tmp_path: Path) -> None:
+    """Codex mode should not initialize for bash script-file execution."""
+    hook = _write_hook(tmp_path, context="codex")
+    script = _write_script(
+        tmp_path,
+        f"source {shlex.quote(str(hook))}\ndeclare -F git >/dev/null\n",
+    )
+
+    result = _run_bash_script(
+        script,
+        interactive=False,
+        env={
+            "CODEX_CI": "1",
+            "CODEX_THREAD_ID": "test-thread",
+        },
+    )
 
     assert result.returncode == 1
     assert REMINDER not in result.stderr
@@ -242,6 +335,29 @@ def test_reminders_env_trigger_matching_is_strict(tmp_path: Path) -> None:
     assert "quick-status env --plain --show-tools" in output
 
 
+def test_reminders_codex_context_mutating_commands_stay_quiet(tmp_path: Path) -> None:
+    """Codex mode should not print reminders for mutating or execution commands."""
+    repo = _init_repo(tmp_path)
+    (repo / "README.md").write_text("# Demo\n", encoding="utf-8")
+    hook = _write_hook(tmp_path, context="codex")
+
+    result = _run_bash_command(
+        f"source {shlex.quote(str(hook))}; "
+        f"cd {shlex.quote(str(repo))}; "
+        "git add --dry-run README.md; "
+        "python3 -c 'print(\"not-trigger\")'",
+        env={
+            "CODEX_CI": "1",
+            "CODEX_THREAD_ID": "test-thread",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "README.md" in result.stdout
+    assert "not-trigger" in result.stdout
+    assert REMINDER not in result.stderr
+
+
 def test_reminders_do_not_clobber_existing_shell_function(tmp_path: Path) -> None:
     """Existing shell functions should keep their behavior after loading the hook."""
     hook = _write_hook(tmp_path)
@@ -267,9 +383,9 @@ def test_reminders_do_not_clobber_existing_shell_function(tmp_path: Path) -> Non
     assert REMINDER not in output
 
 
-def _write_hook(tmp_path: Path) -> Path:
+def _write_hook(tmp_path: Path, *, context: str = "interactive") -> Path:
     hook = tmp_path / "quick-status-reminders.bash"
-    hook.write_text(render_reminders_init("bash"), encoding="utf-8")
+    hook.write_text(render_reminders_init("bash", context=context), encoding="utf-8")
     return hook
 
 
@@ -303,6 +419,20 @@ def _run_bash_script(
     args.append(str(script))
     return subprocess.run(  # noqa: S603
         args,
+        env=_clean_env(env),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _run_bash_command(
+    command: str,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(  # noqa: S603
+        [_bash_path(), "--noprofile", "--norc", "-c", command],
         env=_clean_env(env),
         capture_output=True,
         text=True,
@@ -368,6 +498,8 @@ def _bash_path() -> str:
 def _clean_env(overrides: Mapping[str, str] | None = None) -> dict[str, str]:
     env = dict(os.environ)
     env.pop("BASH_ENV", None)
+    env.pop("CODEX_CI", None)
+    env.pop("CODEX_THREAD_ID", None)
     if overrides:
         env.update(overrides)
     return env

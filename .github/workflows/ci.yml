@@ -107,6 +107,7 @@ jobs:
         run: |
           python -c "import quick_status; print(quick_status.__version__)"
           quick-status --version
+          quick-status reminders init bash --context codex | grep 'CODEX_THREAD_ID'
 
   package-uv:
     name: Package Build (uv)
@@ -139,3 +140,4 @@ jobs:
         run: |
           uv run --no-sync python -c "import quick_status; print(quick_status.__version__)"
           uv run --no-sync quick-status --version
+          uv run --no-sync quick-status reminders init bash --context codex | grep 'CODEX_THREAD_ID'

@@ -9,6 +9,7 @@ import pytest
 
 import quick_status.cli
 import quick_status.git_snapshot
+from quick_status import __version__
 from quick_status.cli import _should_colorize, main
 from quick_status.commands import CommandResult, run_command
 from quick_status.models import GitHubContext, RemoteCheckSummary
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
 def test_cli_version(capsys: pytest.CaptureFixture[str]) -> None:
     """Print package version."""
     assert main(["--version"]) == 0
-    assert capsys.readouterr().out.strip() == "quick-status 0.7.0"
+    assert capsys.readouterr().out.strip() == f"quick-status {__version__}"
 
 
 def test_cli_help_lists_commands(capsys: pytest.CaptureFixture[str]) -> None:

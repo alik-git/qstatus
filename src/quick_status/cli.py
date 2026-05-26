@@ -71,6 +71,7 @@ Examples:
 _REMINDERS_HELP_EPILOG = """\
 Examples:
   quick-status reminders init bash
+  quick-status reminders init bash --context codex
   eval "$(quick-status reminders init bash)"
 """
 
@@ -276,6 +277,12 @@ def build_reminders_parser(
         choices=("bash",),
         help="shell integration to print",
     )
+    init_parser.add_argument(
+        "--context",
+        choices=("interactive", "codex"),
+        default="interactive",
+        help="reminder policy context to render",
+    )
     return parser
 
 
@@ -315,7 +322,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(args_list)
 
     if command == "reminders":
-        print(render_reminders_init(args.shell), end="")
+        print(render_reminders_init(args.shell, context=args.context), end="")
         return 0
 
     cwd = args.cwd.expanduser().resolve()

@@ -32,6 +32,7 @@ quick-status ci
 quick-status ci --json
 quick-status ci --log-tail 40
 quick-status reminders init bash
+quick-status reminders init bash --context codex
 quick-status --version
 ```
 
@@ -45,9 +46,10 @@ install packages, or modify the project.
 `quick-status ci` composes local Git facts with read-only `gh` calls. It does not
 fetch, push, rerun, cancel, watch, or open browser windows.
 
-`quick-status reminders init bash` prints Bash source for an opt-in interactive
-shell integration. It does not modify shell config files, invoke `quick-status`,
-or write JSON.
+`quick-status reminders init bash` prints Bash source for an opt-in shell
+integration. The default context is for interactive shells; the Codex context is
+for guarded non-interactive Codex command shells. The command does not modify
+shell config files, invoke `quick-status`, or write JSON.
 
 ## Repo Snapshot
 
@@ -206,6 +208,12 @@ The integration is intentionally opt-in and inert for non-interactive shells. It
 prints reminders only when stderr is a terminal, preserves the wrapped command's
 exit code, leaves existing shell functions and aliases untouched, and can be
 disabled in a loaded shell with `QUICK_STATUS_REMINDERS=0`.
+
+`quick-status reminders init bash --context codex` emits a separate guarded
+context for Codex command tool shells. It can initialize in non-interactive
+`bash -c` shells and may print reminders to captured stderr, but only when
+`CODEX_THREAD_ID`, `CODEX_CI=1`, and `BASH_EXECUTION_STRING` are all present.
+The default `interactive` context keeps the terminal-only behavior above.
 
 ## JSON And Verbose Evidence
 
