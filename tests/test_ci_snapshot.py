@@ -1,14 +1,14 @@
-"""Tests for qstatus CI snapshots."""
+"""Tests for quick_status CI snapshots."""
 
 from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING
 
-import qstatus.ci_snapshot
-from qstatus.ci_render import render_ci_human
-from qstatus.cli import main
-from qstatus.commands import CommandResult, run_command
+import quick_status.ci_snapshot
+from quick_status.ci_render import render_ci_human
+from quick_status.cli import main
+from quick_status.commands import CommandResult, run_command
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -27,7 +27,7 @@ def test_cli_ci_json_reports_missing_github_remote(
     assert main(["ci", "--cwd", str(repo), "--json"]) == 0
 
     payload = json.loads(capsys.readouterr().out)
-    assert payload["schema_version"] == "qstatus_ci_snapshot_v1"
+    assert payload["schema_version"] == "quick_status_ci_snapshot_v1"
     assert payload["github"]["status"] == "unavailable"
     assert payload["github"]["error"] == "no GitHub remote detected"
     assert payload["currentness"]["state"] == "unknown"
@@ -37,11 +37,11 @@ def test_cli_ci_non_repo_json_exits_two(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A non-repo qstatus ci target should use the normal qstatus error code."""
+    """A non-repo ci target should use the normal quick_status error code."""
     assert main(["ci", "--cwd", str(tmp_path), "--json"]) == 2
 
     payload = json.loads(capsys.readouterr().out)
-    assert payload["schema_version"] == "qstatus_error_v1"
+    assert payload["schema_version"] == "quick_status_error_v1"
     assert "not a git worktree" in payload["error"]
 
 
@@ -54,7 +54,7 @@ def test_ci_current_pr_success(
     head = _git(repo, "rev-parse", "HEAD")
 
     monkeypatch.setattr(
-        qstatus.ci_snapshot,
+        quick_status.ci_snapshot,
         "run_command",
         _fake_gh(
             head=head,
@@ -67,20 +67,21 @@ def test_ci_current_pr_success(
                     "status": "completed",
                     "conclusion": "success",
                     "headSha": head,
-                    "url": "https://github.com/alik-git/qstatus/actions/runs/101",
+                    "url": "https://github.com/alik-git/quick-status/actions/runs/101",
                 }
             ],
         ),
     )
 
-    snapshot = qstatus.ci_snapshot.collect_ci_snapshot(repo)
+    snapshot = quick_status.ci_snapshot.collect_ci_snapshot(repo)
     assert snapshot.currentness.state == "current"
     assert snapshot.commits.local_matches_pr is True
     assert snapshot.changes.worktree_state == "clean"
     assert snapshot.summary is not None
     assert snapshot.summary.ci_state == "success"
     assert (
-        snapshot.runs[0].url == "https://github.com/alik-git/qstatus/actions/runs/101"
+        snapshot.runs[0].url
+        == "https://github.com/alik-git/quick-status/actions/runs/101"
     )
 
 
@@ -94,7 +95,7 @@ def test_ci_stale_pr_success_renders_stale_success(
     pr_head = "f" * 40
 
     monkeypatch.setattr(
-        qstatus.ci_snapshot,
+        quick_status.ci_snapshot,
         "run_command",
         _fake_gh(
             head=head,
@@ -107,13 +108,13 @@ def test_ci_stale_pr_success_renders_stale_success(
                     "status": "completed",
                     "conclusion": "success",
                     "headSha": pr_head,
-                    "url": "https://github.com/alik-git/qstatus/actions/runs/102",
+                    "url": "https://github.com/alik-git/quick-status/actions/runs/102",
                 }
             ],
         ),
     )
 
-    snapshot = qstatus.ci_snapshot.collect_ci_snapshot(repo)
+    snapshot = quick_status.ci_snapshot.collect_ci_snapshot(repo)
 
     assert snapshot.currentness.state == "stale"
     assert snapshot.commits.local_matches_pr is False
@@ -133,7 +134,7 @@ def test_ci_stale_failure_marks_summary_as_not_applying_to_head(
     head = _git(repo, "rev-parse", "HEAD")
 
     monkeypatch.setattr(
-        qstatus.ci_snapshot,
+        quick_status.ci_snapshot,
         "run_command",
         _fake_gh(
             head=head,
@@ -147,13 +148,13 @@ def test_ci_stale_failure_marks_summary_as_not_applying_to_head(
                     "conclusion": "failure",
                     "headSha": "a" * 40,
                     "createdAt": "2026-05-25T19:00:00Z",
-                    "url": "https://github.com/alik-git/qstatus/actions/runs/110",
+                    "url": "https://github.com/alik-git/quick-status/actions/runs/110",
                 },
             ],
         ),
     )
 
-    snapshot = qstatus.ci_snapshot.collect_ci_snapshot(repo)
+    snapshot = quick_status.ci_snapshot.collect_ci_snapshot(repo)
     output = render_ci_human(snapshot)
 
     assert snapshot.currentness.state == "stale"
@@ -173,7 +174,7 @@ def test_ci_human_output_shows_dirty_worktree(
     (repo / "dirty.txt").write_text("not checked by CI yet\n")
 
     monkeypatch.setattr(
-        qstatus.ci_snapshot,
+        quick_status.ci_snapshot,
         "run_command",
         _fake_gh(
             head=head,
@@ -186,13 +187,13 @@ def test_ci_human_output_shows_dirty_worktree(
                     "status": "completed",
                     "conclusion": "success",
                     "headSha": head,
-                    "url": "https://github.com/alik-git/qstatus/actions/runs/106",
+                    "url": "https://github.com/alik-git/quick-status/actions/runs/106",
                 }
             ],
         ),
     )
 
-    output = render_ci_human(qstatus.ci_snapshot.collect_ci_snapshot(repo))
+    output = render_ci_human(quick_status.ci_snapshot.collect_ci_snapshot(repo))
 
     assert "CURRENT current" in output
     assert "CHECKS success" in output
@@ -209,7 +210,7 @@ def test_ci_no_pr_uses_local_head_run(
     head = _git(repo, "rev-parse", "HEAD")
 
     monkeypatch.setattr(
-        qstatus.ci_snapshot,
+        quick_status.ci_snapshot,
         "run_command",
         _fake_gh(
             head=head,
@@ -222,13 +223,13 @@ def test_ci_no_pr_uses_local_head_run(
                     "status": "completed",
                     "conclusion": "success",
                     "headSha": head,
-                    "url": "https://github.com/alik-git/qstatus/actions/runs/103",
+                    "url": "https://github.com/alik-git/quick-status/actions/runs/103",
                 }
             ],
         ),
     )
 
-    snapshot = qstatus.ci_snapshot.collect_ci_snapshot(repo)
+    snapshot = quick_status.ci_snapshot.collect_ci_snapshot(repo)
 
     assert snapshot.pull_request is None
     assert snapshot.commits.expected_oid == head
@@ -246,12 +247,12 @@ def test_ci_no_pr_without_expected_run_is_absent(
     head = _git(repo, "rev-parse", "HEAD")
 
     monkeypatch.setattr(
-        qstatus.ci_snapshot,
+        quick_status.ci_snapshot,
         "run_command",
         _fake_gh(head=head, pr_head=None, pr_checks=[], runs=[]),
     )
 
-    snapshot = qstatus.ci_snapshot.collect_ci_snapshot(repo)
+    snapshot = quick_status.ci_snapshot.collect_ci_snapshot(repo)
 
     assert snapshot.currentness.state == "absent"
     assert snapshot.currentness.reason == "no-run-for-expected-sha"
@@ -269,7 +270,7 @@ def test_ci_cancelled_run_renders_cancelled(
     head = _git(repo, "rev-parse", "HEAD")
 
     monkeypatch.setattr(
-        qstatus.ci_snapshot,
+        quick_status.ci_snapshot,
         "run_command",
         _fake_gh(
             head=head,
@@ -282,13 +283,13 @@ def test_ci_cancelled_run_renders_cancelled(
                     "status": "completed",
                     "conclusion": "cancelled",
                     "headSha": head,
-                    "url": "https://github.com/alik-git/qstatus/actions/runs/107",
+                    "url": "https://github.com/alik-git/quick-status/actions/runs/107",
                 }
             ],
         ),
     )
 
-    snapshot = qstatus.ci_snapshot.collect_ci_snapshot(repo)
+    snapshot = quick_status.ci_snapshot.collect_ci_snapshot(repo)
     output = render_ci_human(snapshot)
 
     assert snapshot.summary is not None
@@ -307,7 +308,7 @@ def test_ci_summary_ignores_stale_runs_when_current_runs_exist(
     head = _git(repo, "rev-parse", "HEAD")
 
     monkeypatch.setattr(
-        qstatus.ci_snapshot,
+        quick_status.ci_snapshot,
         "run_command",
         _fake_gh(
             head=head,
@@ -321,7 +322,7 @@ def test_ci_summary_ignores_stale_runs_when_current_runs_exist(
                     "conclusion": "",
                     "headSha": head,
                     "createdAt": "2026-05-25T20:00:00Z",
-                    "url": "https://github.com/alik-git/qstatus/actions/runs/108",
+                    "url": "https://github.com/alik-git/quick-status/actions/runs/108",
                 },
                 {
                     "databaseId": 109,
@@ -330,13 +331,13 @@ def test_ci_summary_ignores_stale_runs_when_current_runs_exist(
                     "conclusion": "cancelled",
                     "headSha": "a" * 40,
                     "createdAt": "2026-05-25T19:00:00Z",
-                    "url": "https://github.com/alik-git/qstatus/actions/runs/109",
+                    "url": "https://github.com/alik-git/quick-status/actions/runs/109",
                 },
             ],
         ),
     )
 
-    snapshot = qstatus.ci_snapshot.collect_ci_snapshot(repo)
+    snapshot = quick_status.ci_snapshot.collect_ci_snapshot(repo)
     output = render_ci_human(snapshot)
 
     assert snapshot.summary is not None
@@ -357,7 +358,7 @@ def test_ci_pr_check_buckets_are_counted(
     head = _git(repo, "rev-parse", "HEAD")
 
     monkeypatch.setattr(
-        qstatus.ci_snapshot,
+        quick_status.ci_snapshot,
         "run_command",
         _fake_gh(
             head=head,
@@ -373,7 +374,7 @@ def test_ci_pr_check_buckets_are_counted(
         ),
     )
 
-    snapshot = qstatus.ci_snapshot.collect_ci_snapshot(repo)
+    snapshot = quick_status.ci_snapshot.collect_ci_snapshot(repo)
 
     assert snapshot.summary is not None
     assert snapshot.summary.total_checks == 5
@@ -393,7 +394,7 @@ def test_ci_failed_run_collects_jobs_and_log_tail(
     head = _git(repo, "rev-parse", "HEAD")
 
     monkeypatch.setattr(
-        qstatus.ci_snapshot,
+        quick_status.ci_snapshot,
         "run_command",
         _fake_gh(
             head=head,
@@ -406,7 +407,7 @@ def test_ci_failed_run_collects_jobs_and_log_tail(
                     "status": "completed",
                     "conclusion": "failure",
                     "headSha": head,
-                    "url": "https://github.com/alik-git/qstatus/actions/runs/104",
+                    "url": "https://github.com/alik-git/quick-status/actions/runs/104",
                 }
             ],
             jobs=[
@@ -415,14 +416,14 @@ def test_ci_failed_run_collects_jobs_and_log_tail(
                     "name": "Python Checks (3.12)",
                     "status": "completed",
                     "conclusion": "failure",
-                    "url": "https://github.com/alik-git/qstatus/actions/runs/104/job/204",
+                    "url": "https://github.com/alik-git/quick-status/actions/runs/104/job/204",
                 }
             ],
             log_failed="line 1\nline 2\nline 3\nline 4\n",
         ),
     )
 
-    snapshot = qstatus.ci_snapshot.collect_ci_snapshot(repo, log_tail=2)
+    snapshot = quick_status.ci_snapshot.collect_ci_snapshot(repo, log_tail=2)
 
     assert snapshot.summary is not None
     assert snapshot.summary.ci_state == "failure"
@@ -441,7 +442,7 @@ def test_ci_log_tail_failure_is_data(
     head = _git(repo, "rev-parse", "HEAD")
 
     monkeypatch.setattr(
-        qstatus.ci_snapshot,
+        quick_status.ci_snapshot,
         "run_command",
         _fake_gh(
             head=head,
@@ -454,7 +455,7 @@ def test_ci_log_tail_failure_is_data(
                     "status": "completed",
                     "conclusion": "failure",
                     "headSha": head,
-                    "url": "https://github.com/alik-git/qstatus/actions/runs/105",
+                    "url": "https://github.com/alik-git/quick-status/actions/runs/105",
                 }
             ],
             jobs=[],
@@ -462,7 +463,7 @@ def test_ci_log_tail_failure_is_data(
         ),
     )
 
-    snapshot = qstatus.ci_snapshot.collect_ci_snapshot(repo, log_tail=10)
+    snapshot = quick_status.ci_snapshot.collect_ci_snapshot(repo, log_tail=10)
 
     assert snapshot.currentness.state == "current"
     assert snapshot.log_tails[0].status == "unavailable"
@@ -493,7 +494,7 @@ def test_cli_ci_missing_gh_is_structured_unavailable(
             unavailable=True,
         )
 
-    monkeypatch.setattr(qstatus.ci_snapshot, "run_command", fake_run_command)
+    monkeypatch.setattr(quick_status.ci_snapshot, "run_command", fake_run_command)
 
     assert main(["ci", "--cwd", str(repo), "--json"]) == 0
 
@@ -513,7 +514,9 @@ def _repo(tmp_path: Path, *, remote: bool = False, branch: str = "main") -> Path
     _git(repo, "commit", "-m", "initial")
     _git(repo, "branch", "-M", branch)
     if remote:
-        _git(repo, "remote", "add", "origin", "git@github.com:alik-git/qstatus.git")
+        _git(
+            repo, "remote", "add", "origin", "git@github.com:alik-git/quick-status.git"
+        )
     return repo
 
 
@@ -551,7 +554,7 @@ def _fake_gh(
                     {
                         "number": 2,
                         "title": "Test PR",
-                        "url": "https://github.com/alik-git/qstatus/pull/2",
+                        "url": "https://github.com/alik-git/quick-status/pull/2",
                         "state": "OPEN",
                         "isDraft": False,
                         "baseRefName": "main",

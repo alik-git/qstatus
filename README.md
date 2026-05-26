@@ -1,4 +1,4 @@
-# qstatus
+# quick-status
 
 Quick local status snapshots for developer workspaces.
 
@@ -19,38 +19,38 @@ python -m pip install -e ".[dev]"
 ## Usage
 
 ```bash
-qstatus
-qstatus repo
-qstatus repo --json
-qstatus repo --github
-qstatus repo --cwd /path/to/repo
-qstatus repo --verbose
-qstatus repo --plain
-qstatus repo --non-compact
-qstatus repo --worktrees
-qstatus repo --stashes --stash-limit 5
-qstatus repo --color=always
-qstatus env
-qstatus env --cwd /path/to/project
-qstatus env --json
-qstatus ci
-qstatus ci --json
-qstatus ci --cwd /path/to/repo
-qstatus ci --log-tail 40
-qstatus --version
+quick-status
+quick-status repo
+quick-status repo --json
+quick-status repo --github
+quick-status repo --cwd /path/to/repo
+quick-status repo --verbose
+quick-status repo --plain
+quick-status repo --non-compact
+quick-status repo --worktrees
+quick-status repo --stashes --stash-limit 5
+quick-status repo --color=always
+quick-status env
+quick-status env --cwd /path/to/project
+quick-status env --json
+quick-status ci
+quick-status ci --json
+quick-status ci --cwd /path/to/repo
+quick-status ci --log-tail 40
+quick-status --version
 ```
 
-`qstatus` is an alias for `qstatus repo`. By default it performs a fast local
+`quick-status` is an alias for `quick-status repo`. By default it performs a fast local
 Git snapshot only. It does not fetch, push, pull, run tests, run builds, or call
 network services.
 
 Example human output:
 
 ```text
-REPO qstatus /home/ali/Projects/qstatus
+REPO quick-status /home/ali/Projects/quick-status
 BRANCH main 6acc81f origin/main synced ahead=0 behind=0
 STATE clean staged=0 unstaged=0 untracked=0 conflicts=0 stash=0
-REMOTE origin git@github.com:alik-git/qstatus.git
+REMOTE origin git@github.com:alik-git/quick-status.git
 SUBMODULES none
 PR not-requested
 CI not-requested
@@ -63,15 +63,15 @@ Use `--worktrees` when you want the linked worktree map for the current repo
 family:
 
 ```bash
-qstatus repo --worktrees
+quick-status repo --worktrees
 ```
 
 Use `--stashes` when you need bounded stash details in addition to the normal
 stash count:
 
 ```bash
-qstatus repo --stashes
-qstatus repo --stashes --stash-limit 10
+quick-status repo --stashes
+quick-status repo --stashes --stash-limit 10
 ```
 
 These are read-only inventory flags. They do not create, prune, apply, drop, or
@@ -80,14 +80,14 @@ repair anything.
 Use `--json` when another tool or agent should consume the snapshot:
 
 ```bash
-qstatus repo --json
+quick-status repo --json
 ```
 
 Use `--github` only when you want read-only GitHub context through the `gh` CLI:
 
 ```bash
-qstatus repo --github
-qstatus repo --json --github
+quick-status repo --github
+quick-status repo --json --github
 ```
 
 GitHub mode reports PR, CI/check, and package-release facts when available. If
@@ -98,23 +98,23 @@ For human output, `--github` prints and flushes the local Git facts before
 running GitHub checks, then appends PR, CI, and release facts when they are
 ready. JSON output remains a single complete object printed at the end.
 
-`qstatus` reports facts and neutral summaries only. It intentionally does not
+`quick-status` reports facts and neutral summaries only. It intentionally does not
 decide whether a repo is ready to commit, push, merge, or release.
 
 ## CI Snapshots
 
-Use `qstatus ci` when you need the deeper GitHub CI facts behind a branch or
+Use `quick-status ci` when you need the deeper GitHub CI facts behind a branch or
 PR:
 
 ```bash
-qstatus ci
-qstatus ci --cwd ~/Projects/worksets/devpy_work/devpy-runner
-qstatus ci --json
-qstatus ci --verbose
-qstatus ci --log-tail 40
+quick-status ci
+quick-status ci --cwd ~/Projects/worksets/devpy_work/devpy-runner
+quick-status ci --json
+quick-status ci --verbose
+quick-status ci --log-tail 40
 ```
 
-`qstatus ci` is read-only. It does not fetch, push, rerun workflows, cancel
+`quick-status ci` is read-only. It does not fetch, push, rerun workflows, cancel
 runs, or open a browser. It reports local `HEAD`, worktree cleanliness, the
 current PR when one exists, expected SHA, current/stale/absent CI evidence,
 check buckets, workflow run URLs, and failed job URLs.
@@ -122,13 +122,13 @@ check buckets, workflow run URLs, and failed job URLs.
 Example no-PR output:
 
 ```text
-CI qstatus alik-git/qstatus
+CI quick-status alik-git/quick-status
 BRANCH main local=4955870 upstream=origin/main synced
 STATE clean staged=0 unstaged=0 untracked=0 conflicts=0
 PR none
 CURRENT current expected=4955870 checked=4955870 source=run-list-commit reason=run-exists-for-expected-sha
 RUNS success total=1 pass=1 fail=0 pending=0 running=0 skipped=0 cancel=0 unknown=0 applies_to_head=yes
-RUN Checks success id=26352434014 sha=4955870 currentness=current url=https://github.com/alik-git/qstatus/actions/runs/26352434014
+RUN Checks success id=26352434014 sha=4955870 currentness=current url=https://github.com/alik-git/quick-status/actions/runs/26352434014
 ```
 
 `--log-tail N` is intentionally simple and opt-in. For failed current GitHub
@@ -140,9 +140,9 @@ Human output uses color automatically when stdout is an interactive terminal.
 Machine-readable JSON is never colorized. To control ANSI color explicitly:
 
 ```bash
-qstatus repo --plain        # no ANSI color
-qstatus repo --color=never  # no ANSI color
-qstatus repo --color=always # force ANSI color
+quick-status repo --plain        # no ANSI color
+quick-status repo --color=never  # no ANSI color
+quick-status repo --color=always # force ANSI color
 ```
 
 `--plain` overrides `--color`. Automatic color also honors the standard
@@ -150,33 +150,33 @@ qstatus repo --color=always # force ANSI color
 
 ## Environment Snapshots
 
-Use `qstatus env` to inspect Python, conda, venv, devpy, uv, and py_runner facts
+Use `quick-status env` to inspect Python, conda, venv, devpy, uv, and py_runner facts
 without activating or modifying anything:
 
 ```bash
-qstatus env
-qstatus env --cwd ~/Projects/motion_data_processing_worktree1
-qstatus env --show-all
-qstatus env --show-tools --show-hints
-qstatus env --abs-paths
-qstatus env --compact
-qstatus env --json
-qstatus env --verbose
+quick-status env
+quick-status env --cwd ~/Projects/motion_data_processing_worktree1
+quick-status env --show-all
+quick-status env --show-tools --show-hints
+quick-status env --abs-paths
+quick-status env --compact
+quick-status env --json
+quick-status env --verbose
 ```
 
 Example for a normal Python project:
 
 ```text
 SHELL
-  cwd  ~/Projects/qstatus
+  cwd  ~/Projects/quick-status
   kind=neutral  conda=none  venv=none
 PYTHON
-  runtime  ~/.local/share/uv/tools/qstatus/bin/python3
+  runtime  ~/.local/share/uv/tools/quick-status/bin/python3
   python   missing
   python3  /usr/bin/python3
   version=3.14.4  venv_like=yes
 PROJECT
-  root  ~/Projects/qstatus
+  root  ~/Projects/quick-status
   pyproject=ok  uv.lock=yes  devpy=no  .venv=yes
 ```
 
@@ -207,12 +207,12 @@ HINTS devpy_python=devpy python
           --python .venv/bin/python
 ```
 
-`qstatus env` treats tools like `python`, `python3`, `pip`, `conda`, `devpy`,
+`quick-status env` treats tools like `python`, `python3`, `pip`, `conda`, `devpy`,
 `uv`, and `py_runner` as optional facts. Missing tools are reported as missing
 instead of crashing the command. Human output compacts home-relative paths with
 `~`; pass `--abs-paths` when exact absolute paths are more useful. Default env
 collection is path-based and avoids slow `--version` subprocesses; use
-`--verbose` when you want those command records and version probes. `qstatus
+`--verbose` when you want those command records and version probes. `quick-status
 repo` still requires `git`, but reports a missing Git executable directly
 instead of confusing it with a non-repository path.
 
@@ -253,9 +253,9 @@ release workflow is [`.github/workflows/release.yml`](.github/workflows/release.
 Use these values in PyPI's pending trusted publisher form:
 
 ```text
-PyPI project name: qstatus
+PyPI project name: quick-status
 Owner: alik-git
-Repository name: qstatus
+Repository name: quick-status
 Workflow name: release.yml
 Environment name: pypi
 ```

@@ -1,11 +1,11 @@
-"""Collect qstatus CI snapshots through the GitHub CLI."""
+"""Collect quick_status CI snapshots through the GitHub CLI."""
 
 from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING, Any
 
-from qstatus.ci_models import (
+from quick_status.ci_models import (
     CI_SCHEMA_VERSION,
     CiCheck,
     CiCommitRefs,
@@ -18,13 +18,18 @@ from qstatus.ci_models import (
     CiSnapshot,
     CiSummary,
 )
-from qstatus.commands import CommandResult, run_command
-from qstatus.git_snapshot import collect_repo_snapshot
+from quick_status.commands import CommandResult, run_command
+from quick_status.git_snapshot import collect_repo_snapshot
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from qstatus.models import BranchState, ChangeSummary, CommandRecord, RepoIdentity
+    from quick_status.models import (
+        BranchState,
+        ChangeSummary,
+        CommandRecord,
+        RepoIdentity,
+    )
 
 
 DEFAULT_RUN_LIMIT = 20

@@ -1,6 +1,6 @@
 # Repo Overview
 
-`qstatus` is a small read-only status tool for humans and coding agents.
+`quick-status` is a small read-only status tool for humans and coding agents.
 
 It answers two questions quickly:
 
@@ -25,16 +25,16 @@ GitHub calls must stay explicit.
 
 ## Public Surface
 
-- `qstatus` / `qstatus repo`: local Git status snapshot
-- `qstatus repo --github`: local Git facts plus read-only GitHub PR, CI, and
+- `quick-status` / `quick-status repo`: local Git status snapshot
+- `quick-status repo --github`: local Git facts plus read-only GitHub PR, CI, and
   release facts through `gh`
-- `qstatus repo --worktrees`: local Git facts plus linked worktree inventory
-- `qstatus repo --stashes`: local Git facts plus bounded stash inventory
-- `qstatus repo --json`: stable repo JSON
-- `qstatus env`: Python/project environment snapshot
-- `qstatus env --json`: stable environment JSON
-- `qstatus ci`: detailed read-only GitHub CI snapshot
-- `qstatus ci --json`: stable CI JSON
+- `quick-status repo --worktrees`: local Git facts plus linked worktree inventory
+- `quick-status repo --stashes`: local Git facts plus bounded stash inventory
+- `quick-status repo --json`: stable repo JSON
+- `quick-status env`: Python/project environment snapshot
+- `quick-status env --json`: stable environment JSON
+- `quick-status ci`: detailed read-only GitHub CI snapshot
+- `quick-status ci --json`: stable CI JSON
 
 See [API](api.md) for the command and JSON contract.
 
@@ -65,9 +65,9 @@ Collectors own meaning. Renderers own presentation. The CLI should stay thin.
 - Missing optional tools are facts, not crashes.
 - JSON is the stable machine contract; human output can evolve for readability.
 - Repo output is compact by default; env output is sectioned by default.
-- `qstatus ci` can be slower than `repo --github`, but it should remain a
+- `quick-status ci` can be slower than `repo --github`, but it should remain a
   factual read-only diagnostic rather than a GitHub Actions control plane.
-- No readiness classifier belongs in qstatus. Callers can judge readiness from
+- No readiness classifier belongs in quick-status. Callers can judge readiness from
   the facts.
 - Worktree and stash reporting must stay factual: no safe-to-delete labels, no
   repair advice, and no mutation.

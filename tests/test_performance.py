@@ -1,4 +1,4 @@
-"""Performance regression tests for qstatus fast paths."""
+"""Performance regression tests for quick_status fast paths."""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ import stat
 import time
 from typing import TYPE_CHECKING
 
-from qstatus.cli import main
-from qstatus.env_render import render_env_human
-from qstatus.env_snapshot import collect_env_snapshot
+from quick_status.cli import main
+from quick_status.env_render import render_env_human
+from quick_status.env_snapshot import collect_env_snapshot
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -54,7 +54,7 @@ def test_env_default_fast_path_budget(
 
     breakdown = (
         f"collect={collect_s:.4f}s render={render_s:.4f}s main={main_s:.4f}s; "
-        "default qstatus env should use path probes only. "
+        "default quick_status env should use path probes only. "
         "If this fails, check for accidental version subprocesses or broad scans."
     )
     assert collect_s < ENV_COLLECT_BUDGET_S, breakdown

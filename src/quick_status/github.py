@@ -6,8 +6,8 @@ import json
 import tomllib
 from typing import TYPE_CHECKING, Any
 
-from qstatus.commands import CommandResult, run_command
-from qstatus.models import (
+from quick_status.commands import CommandResult, run_command
+from quick_status.models import (
     BranchState,
     CommandRecord,
     GitHubContext,

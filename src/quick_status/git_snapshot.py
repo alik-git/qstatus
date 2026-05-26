@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from qstatus.commands import CommandResult, run_command
-from qstatus.models import (
+from quick_status.commands import CommandResult, run_command
+from quick_status.models import (
     SCHEMA_VERSION,
     BranchState,
     ChangeSummary,
@@ -25,7 +25,7 @@ from qstatus.models import (
 
 
 class RepoSnapshotError(RuntimeError):
-    """Raised when qstatus cannot create a repo snapshot."""
+    """Raised when quick_status cannot create a repo snapshot."""
 
 
 _GITHUB_REMOTE_PATTERNS = (

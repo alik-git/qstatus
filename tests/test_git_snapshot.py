@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from qstatus.commands import CommandResult, run_command
-from qstatus.git_snapshot import (
+from quick_status.commands import CommandResult, run_command
+from quick_status.git_snapshot import (
     collect_repo_snapshot,
     collect_stashes,
     github_repo_from_remotes,
@@ -13,7 +13,7 @@ from qstatus.git_snapshot import (
     parse_worktree_list,
     summarize_sync_state,
 )
-from qstatus.models import RemoteInfo
+from quick_status.models import RemoteInfo
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -112,11 +112,11 @@ def test_github_repo_from_remotes_prefers_origin() -> None:
             [
                 RemoteInfo(
                     name="origin",
-                    fetch_url="git@github.com:alik-git/qstatus.git",
+                    fetch_url="git@github.com:alik-git/quick-status.git",
                 ),
             ],
         )
-        == "alik-git/qstatus"
+        == "alik-git/quick-status"
     )
     assert (
         github_repo_from_remotes(

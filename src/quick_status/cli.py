@@ -1,4 +1,4 @@
-"""Command-line entry point for qstatus."""
+"""Command-line entry point for quick-status."""
 
 from __future__ import annotations
 
@@ -10,15 +10,15 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from qstatus import __version__
-from qstatus.ci_render import render_ci_human, render_ci_json
-from qstatus.ci_snapshot import collect_ci_snapshot, validate_log_tail
-from qstatus.env_render import render_env_human, render_env_json
-from qstatus.env_snapshot import collect_env_snapshot
-from qstatus.git_snapshot import RepoSnapshotError, collect_repo_snapshot
-from qstatus.github import collect_github_context
-from qstatus.models import RepoSummary
-from qstatus.repo_render import (
+from quick_status import __version__
+from quick_status.ci_render import render_ci_human, render_ci_json
+from quick_status.ci_snapshot import collect_ci_snapshot, validate_log_tail
+from quick_status.env_render import render_env_human, render_env_json
+from quick_status.env_snapshot import collect_env_snapshot
+from quick_status.git_snapshot import RepoSnapshotError, collect_repo_snapshot
+from quick_status.github import collect_github_context
+from quick_status.models import RepoSummary
+from quick_status.repo_render import (
     render_repo_github_lines,
     render_repo_human,
     render_repo_json,
@@ -32,40 +32,40 @@ if TYPE_CHECKING:
 
 _REPO_HELP_EPILOG = """\
 Commands:
-  qstatus [repo]       local Git/repo status
-  qstatus env          Python, conda, venv, devpy, and tool status
-  qstatus ci           detailed read-only GitHub CI status
+  quick-status [repo]       local Git/repo status
+  quick-status env          Python, conda, venv, devpy, and tool status
+  quick-status ci           detailed read-only GitHub CI status
 
 Examples:
-  qstatus repo --worktrees
-  qstatus repo --stashes --stash-limit 5
-  qstatus repo --github
-  qstatus env --show-all
-  qstatus ci --log-tail 40
+  quick-status repo --worktrees
+  quick-status repo --stashes --stash-limit 5
+  quick-status repo --github
+  quick-status env --show-all
+  quick-status ci --log-tail 40
 
-Run `qstatus env --help` or `qstatus ci --help` for command-specific options.
+Run `quick-status env --help` or `quick-status ci --help` for command-specific options.
 """
 
 
 _ENV_HELP_EPILOG = """\
 Examples:
-  qstatus env
-  qstatus env --compact
-  qstatus env --show-tools --show-hints
-  qstatus env --json
+  quick-status env
+  quick-status env --compact
+  quick-status env --show-tools --show-hints
+  quick-status env --json
 """
 
 
 _CI_HELP_EPILOG = """\
 Examples:
-  qstatus ci
-  qstatus ci --json
-  qstatus ci --log-tail 40
+  quick-status ci
+  quick-status ci --json
+  quick-status ci --log-tail 40
 """
 
 
-def build_repo_parser(prog: str = "qstatus") -> argparse.ArgumentParser:
-    """Build the qstatus repo command-line parser."""
+def build_repo_parser(prog: str = "quick-status") -> argparse.ArgumentParser:
+    """Build the quick-status repo command-line parser."""
     parser = argparse.ArgumentParser(
         prog=prog,
         description="Print a quick local repository status snapshot.",
@@ -129,8 +129,8 @@ def build_repo_parser(prog: str = "qstatus") -> argparse.ArgumentParser:
     return parser
 
 
-def build_env_parser(prog: str = "qstatus env") -> argparse.ArgumentParser:
-    """Build the qstatus env command-line parser."""
+def build_env_parser(prog: str = "quick-status env") -> argparse.ArgumentParser:
+    """Build the quick-status env command-line parser."""
     parser = argparse.ArgumentParser(
         prog=prog,
         description="Print a quick Python and project environment snapshot.",
@@ -198,8 +198,8 @@ def build_env_parser(prog: str = "qstatus env") -> argparse.ArgumentParser:
     return parser
 
 
-def build_ci_parser(prog: str = "qstatus ci") -> argparse.ArgumentParser:
-    """Build the qstatus ci command-line parser."""
+def build_ci_parser(prog: str = "quick-status ci") -> argparse.ArgumentParser:
+    """Build the quick-status ci command-line parser."""
     parser = argparse.ArgumentParser(
         prog=prog,
         description="Print a read-only GitHub CI status snapshot.",
@@ -246,23 +246,23 @@ def build_ci_parser(prog: str = "qstatus ci") -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the qstatus command-line interface."""
+    """Run the quick-status command-line interface."""
     args_list = list(sys.argv[1:] if argv is None else argv)
     if args_list == ["--version"]:
-        print(f"qstatus {__version__}")
+        print(f"quick-status {__version__}")
         return 0
 
-    prog = "qstatus"
+    prog = "quick-status"
     command = "repo"
     if args_list[:1] == ["repo"]:
-        prog = "qstatus repo"
+        prog = "quick-status repo"
         args_list = args_list[1:]
     elif args_list[:1] == ["env"]:
-        prog = "qstatus env"
+        prog = "quick-status env"
         command = "env"
         args_list = args_list[1:]
     elif args_list[:1] == ["ci"]:
-        prog = "qstatus ci"
+        prog = "quick-status ci"
         command = "ci"
         args_list = args_list[1:]
 
@@ -290,12 +290,12 @@ def main(argv: list[str] | None = None) -> int:
             if args.json_output:
                 print(
                     json.dumps(
-                        {"error": str(exc), "schema_version": "qstatus_error_v1"},
+                        {"error": str(exc), "schema_version": "quick_status_error_v1"},
                         sort_keys=True,
                     ),
                 )
             else:
-                print(f"qstatus: {exc}", file=sys.stderr)
+                print(f"quick-status: {exc}", file=sys.stderr)
             return 2
         color = _should_colorize(
             args.color,
@@ -352,12 +352,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.json_output:
             print(
                 json.dumps(
-                    {"error": str(exc), "schema_version": "qstatus_error_v1"},
+                    {"error": str(exc), "schema_version": "quick_status_error_v1"},
                     sort_keys=True,
                 ),
             )
         else:
-            print(f"qstatus: {exc}", file=sys.stderr)
+            print(f"quick-status: {exc}", file=sys.stderr)
         return 2
 
     color = _should_colorize(

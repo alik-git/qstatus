@@ -1,4 +1,4 @@
-"""Human and JSON renderers for qstatus environment snapshots."""
+"""Human and JSON renderers for quick_status environment snapshots."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from qstatus import formatting as fmt
+from quick_status import formatting as fmt
 
 if TYPE_CHECKING:
-    from qstatus.models import EnvSnapshot, ProjectEnvironment, ToolFact
+    from quick_status.models import EnvSnapshot, ProjectEnvironment, ToolFact
 
 
 def render_env_json(snapshot: EnvSnapshot, *, verbose: bool = False) -> str:

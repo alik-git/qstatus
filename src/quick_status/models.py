@@ -1,11 +1,11 @@
-"""Data models for qstatus repo snapshots."""
+"""Data models for quick_status repo snapshots."""
 
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 
-SCHEMA_VERSION = "qstatus_repo_snapshot_v1"
-ENV_SCHEMA_VERSION = "qstatus_env_snapshot_v1"
+SCHEMA_VERSION = "quick_status_repo_snapshot_v1"
+ENV_SCHEMA_VERSION = "quick_status_env_snapshot_v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,7 +49,7 @@ class ShellState:
 
 @dataclass(frozen=True, slots=True)
 class PythonRuntimeInfo:
-    """The Python runtime that is currently executing qstatus."""
+    """The Python runtime that is currently executing quick_status."""
 
     executable: str
     version: str
@@ -101,7 +101,7 @@ class DevpyProject:
 
 @dataclass(frozen=True, slots=True)
 class EnvSnapshot:
-    """Full qstatus environment snapshot."""
+    """Full quick_status environment snapshot."""
 
     schema_version: str
     shell: ShellState
@@ -290,7 +290,7 @@ class RepoSummary:
 
 @dataclass(frozen=True, slots=True)
 class RepoSnapshot:
-    """Full qstatus repo snapshot."""
+    """Full quick_status repo snapshot."""
 
     schema_version: str
     repo: RepoIdentity

@@ -6,13 +6,13 @@ import json
 import pathlib
 from typing import TYPE_CHECKING
 
-from qstatus.commands import CommandResult
-from qstatus.github import (
+from quick_status.commands import CommandResult
+from quick_status.github import (
     collect_github_context,
     summarize_pr_checks,
     summarize_workflow_runs,
 )
-from qstatus.models import BranchState
+from quick_status.models import BranchState
 
 if TYPE_CHECKING:
     import pytest
@@ -85,7 +85,7 @@ def test_collect_github_context_with_fake_gh(
                     {
                         "number": 12,
                         "title": "Add repo command",
-                        "url": "https://github.com/alik-git/qstatus/pull/12",
+                        "url": "https://github.com/alik-git/quick-status/pull/12",
                         "state": "OPEN",
                         "isDraft": False,
                         "baseRefName": "main",
@@ -102,16 +102,16 @@ def test_collect_github_context_with_fake_gh(
                 json.dumps(
                     {
                         "tagName": "v0.2.0",
-                        "url": "https://github.com/alik-git/qstatus/releases/tag/v0.2.0",
+                        "url": "https://github.com/alik-git/quick-status/releases/tag/v0.2.0",
                     },
                 ),
             )
         raise AssertionError(args)
 
-    monkeypatch.setattr("qstatus.github.run_command", fake_run_command)
+    monkeypatch.setattr("quick_status.github.run_command", fake_run_command)
 
     context, commands = collect_github_context(
-        repo="alik-git/qstatus",
+        repo="alik-git/quick-status",
         branch=branch,
         root=tmp_path,
         include_commands=True,
@@ -163,7 +163,7 @@ def test_collect_github_context_falls_back_to_pr_status(
                             {
                                 "number": 7,
                                 "title": "Fallback PR",
-                                "url": "https://github.com/alik-git/qstatus/pull/7",
+                                "url": "https://github.com/alik-git/quick-status/pull/7",
                                 "state": "OPEN",
                                 "isDraft": True,
                                 "baseRefName": "main",
@@ -181,10 +181,10 @@ def test_collect_github_context_falls_back_to_pr_status(
             return _fail(args, "release not found")
         raise AssertionError(args)
 
-    monkeypatch.setattr("qstatus.github.run_command", fake_run_command)
+    monkeypatch.setattr("quick_status.github.run_command", fake_run_command)
 
     context, _commands = collect_github_context(
-        repo="alik-git/qstatus",
+        repo="alik-git/quick-status",
         branch=branch,
         root=tmp_path,
     )
@@ -230,7 +230,7 @@ def test_collect_github_context_falls_back_to_pr_list(
                         {
                             "number": 8,
                             "title": "List fallback PR",
-                            "url": "https://github.com/alik-git/qstatus/pull/8",
+                            "url": "https://github.com/alik-git/quick-status/pull/8",
                             "state": "OPEN",
                             "isDraft": False,
                             "baseRefName": "main",
@@ -246,10 +246,10 @@ def test_collect_github_context_falls_back_to_pr_list(
             return _fail(args, "release not found")
         raise AssertionError(args)
 
-    monkeypatch.setattr("qstatus.github.run_command", fake_run_command)
+    monkeypatch.setattr("quick_status.github.run_command", fake_run_command)
 
     context, _commands = collect_github_context(
-        repo="alik-git/qstatus",
+        repo="alik-git/quick-status",
         branch=branch,
         root=tmp_path,
     )
@@ -290,10 +290,10 @@ def test_collect_github_context_reports_missing_gh(
             unavailable=True,
         )
 
-    monkeypatch.setattr("qstatus.github.run_command", fake_run_command)
+    monkeypatch.setattr("quick_status.github.run_command", fake_run_command)
 
     context, _commands = collect_github_context(
-        repo="alik-git/qstatus",
+        repo="alik-git/quick-status",
         branch=branch,
         root=tmp_path,
     )

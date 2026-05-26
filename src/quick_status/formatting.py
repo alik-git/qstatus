@@ -1,4 +1,4 @@
-"""Shared terminal formatting primitives for qstatus human output."""
+"""Shared terminal formatting primitives for quick_status human output."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from qstatus.models import CommandRecord
+    from quick_status.models import CommandRecord
 
 
 _RESET = "\033[0m"
@@ -48,7 +48,7 @@ def number(value: str, color: bool) -> str:
 
 
 def state(value: str, color: bool) -> str:
-    """Format common status words with stable qstatus colors."""
+    """Format common status words with stable quick_status colors."""
     if value in {
         "clean",
         "synced",

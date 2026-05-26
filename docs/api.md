@@ -1,54 +1,54 @@
 # API
 
-`qstatus` exposes one package metadata value and three read-only CLI snapshots:
+`quick-status` exposes one package metadata value and three read-only CLI snapshots:
 
-- `qstatus repo`: local Git facts, with optional GitHub enrichment
-- `qstatus env`: Python/project environment facts
-- `qstatus ci`: deeper GitHub CI facts for the current branch or PR
+- `quick-status repo`: local Git facts, with optional GitHub enrichment
+- `quick-status env`: Python/project environment facts
+- `quick-status ci`: deeper GitHub CI facts for the current branch or PR
 
 ```python
-import qstatus
+import quick_status
 
-print(qstatus.__version__)
+print(quick_status.__version__)
 ```
 
 ## Commands
 
 ```bash
-qstatus
-qstatus repo
-qstatus repo --json
-qstatus repo --github
-qstatus repo --non-compact
-qstatus repo --worktrees
-qstatus repo --stashes --stash-limit 5
-qstatus env
-qstatus env --json
-qstatus env --compact
-qstatus env --show-all
-qstatus ci
-qstatus ci --json
-qstatus ci --log-tail 40
-qstatus --version
+quick-status
+quick-status repo
+quick-status repo --json
+quick-status repo --github
+quick-status repo --non-compact
+quick-status repo --worktrees
+quick-status repo --stashes --stash-limit 5
+quick-status env
+quick-status env --json
+quick-status env --compact
+quick-status env --show-all
+quick-status ci
+quick-status ci --json
+quick-status ci --log-tail 40
+quick-status --version
 ```
 
-`qstatus` is an alias for `qstatus repo`. The default repo command only reads
+`quick-status` is an alias for `quick-status repo`. The default repo command only reads
 local Git state. It does not fetch, mutate refs, run workflows, or call GitHub.
 
-`qstatus env` inspects the active shell, Python runtime, project markers,
+`quick-status env` inspects the active shell, Python runtime, project markers,
 optional `devpy` config, and common tools. It does not activate environments,
 install packages, or modify the project.
 
-`qstatus ci` composes local Git facts with read-only `gh` calls. It does not
+`quick-status ci` composes local Git facts with read-only `gh` calls. It does not
 fetch, push, rerun, cancel, watch, or open browser windows.
 
 ## Repo Snapshot
 
-`qstatus repo --json` emits a stable object with:
+`quick-status repo --json` emits a stable object with:
 
 ```json
 {
-  "schema_version": "qstatus_repo_snapshot_v1",
+  "schema_version": "quick_status_repo_snapshot_v1",
   "repo": {},
   "branch": {},
   "changes": {},
@@ -80,23 +80,23 @@ Top-level sections:
 Repo human output is compact by default. Use `--non-compact` for the sectioned
 human summary.
 
-`qstatus repo --worktrees` adds a human worktree section with path, branch,
+`quick-status repo --worktrees` adds a human worktree section with path, branch,
 commit, and factual flags such as `current`, `detached`, `bare`, and
 `prunable`. It does not scan every worktree for dirt unless a future explicit
 flag adds that behavior.
 
-`qstatus repo --stashes` adds bounded stash detail rows. Use `--stash-limit N`
+`quick-status repo --stashes` adds bounded stash detail rows. Use `--stash-limit N`
 to choose the maximum number of entries. Stash detail collection uses read-only
 stash-list/show commands and never applies, drops, pops, rewrites, or ranks
 stashes.
 
 ## Environment Snapshot
 
-`qstatus env --json` emits a stable object with:
+`quick-status env --json` emits a stable object with:
 
 ```json
 {
-  "schema_version": "qstatus_env_snapshot_v1",
+  "schema_version": "quick_status_env_snapshot_v1",
   "shell": {},
   "runtime": {},
   "python_commands": {},
@@ -110,7 +110,7 @@ stashes.
 Top-level sections:
 
 - `shell`: current cwd plus active conda/venv shell markers
-- `runtime`: the Python executable currently running `qstatus`
+- `runtime`: the Python executable currently running `quick-status`
 - `python_commands`: PATH facts for `python` and `python3`
 - `project`: detected project root, pyproject metadata, lock/config markers, and
   `.venv` presence
@@ -129,11 +129,11 @@ Use `--verbose` for command evidence records and version probes.
 
 ## CI Snapshot
 
-`qstatus ci --json` emits a stable object with:
+`quick-status ci --json` emits a stable object with:
 
 ```json
 {
-  "schema_version": "qstatus_ci_snapshot_v1",
+  "schema_version": "quick_status_ci_snapshot_v1",
   "repo": {},
   "branch": {},
   "changes": {},
@@ -176,7 +176,7 @@ Currentness values:
 - `absent`: no run exists for the expected SHA
 - `unknown`: GitHub data is unavailable or conflicting
 
-`qstatus ci` exits `0` when it produces a snapshot, even if CI is failing,
+`quick-status ci` exits `0` when it produces a snapshot, even if CI is failing,
 stale, absent, cancelled, or unavailable. It exits `2` for local repo
 inspection or CLI argument failures.
 
@@ -201,7 +201,7 @@ Command evidence is omitted by default.
 
 ## GitHub Mode
 
-`qstatus repo --github` uses read-only `gh` API calls. Missing `gh`, missing
+`quick-status repo --github` uses read-only `gh` API calls. Missing `gh`, missing
 auth, offline errors, or rate limits do not fail the local snapshot. They
 produce `github.status = "unavailable"` with an error string.
 
@@ -209,7 +209,7 @@ For human output, GitHub mode prints and flushes local Git facts first, then
 appends PR, CI, and release facts after the slower GitHub calls finish. JSON
 output remains one complete object printed at the end.
 
-`qstatus` reports facts only. It does not emit readiness labels or next-action
+`quick-status` reports facts only. It does not emit readiness labels or next-action
 recommendations.
 
 ## Color And Paths
@@ -220,4 +220,4 @@ human output, while `--color=always` forces ANSI color. Auto color honors
 `NO_COLOR` and disables color when `TERM=dumb`.
 
 Env human output compacts home-relative paths with `~` by default. Use
-`qstatus env --abs-paths` when exact absolute paths are more useful.
+`quick-status env --abs-paths` when exact absolute paths are more useful.

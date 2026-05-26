@@ -1,4 +1,4 @@
-"""Tests for qstatus CLI behavior."""
+"""Tests for quick_status CLI behavior."""
 
 from __future__ import annotations
 
@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-import qstatus.cli
-import qstatus.git_snapshot
-from qstatus.cli import _should_colorize, main
-from qstatus.commands import CommandResult, run_command
-from qstatus.models import GitHubContext, RemoteCheckSummary
+import quick_status.cli
+import quick_status.git_snapshot
+from quick_status.cli import _should_colorize, main
+from quick_status.commands import CommandResult, run_command
+from quick_status.models import GitHubContext, RemoteCheckSummary
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 def test_cli_version(capsys: pytest.CaptureFixture[str]) -> None:
     """Print package version."""
     assert main(["--version"]) == 0
-    assert capsys.readouterr().out.strip() == "qstatus 0.5.0"
+    assert capsys.readouterr().out.strip() == "quick-status 0.6.0"
 
 
 def test_cli_help_lists_commands(capsys: pytest.CaptureFixture[str]) -> None:
@@ -31,10 +31,10 @@ def test_cli_help_lists_commands(capsys: pytest.CaptureFixture[str]) -> None:
     assert exc_info.value.code == 0
     output = capsys.readouterr().out
     assert "Commands:" in output
-    assert "qstatus [repo]" in output
-    assert "qstatus env" in output
-    assert "qstatus ci" in output
-    assert "qstatus repo --worktrees" in output
+    assert "quick-status [repo]" in output
+    assert "quick-status env" in output
+    assert "quick-status ci" in output
+    assert "quick-status repo --worktrees" in output
 
 
 def test_cli_repo_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -51,7 +51,7 @@ def test_cli_repo_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> No
     assert main(["repo", "--cwd", str(repo), "--json"]) == 0
 
     payload = json.loads(capsys.readouterr().out)
-    assert payload["schema_version"] == "qstatus_repo_snapshot_v1"
+    assert payload["schema_version"] == "quick_status_repo_snapshot_v1"
     assert payload["repo"]["root"] == str(repo)
     assert payload["summary"]["worktree_state"] == "clean"
     assert payload["github"]["status"] == "not_requested"
@@ -90,7 +90,7 @@ def test_cli_non_repo_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -
     assert main(["--cwd", str(tmp_path), "--json"]) == 2
 
     payload = json.loads(capsys.readouterr().out)
-    assert payload["schema_version"] == "qstatus_error_v1"
+    assert payload["schema_version"] == "quick_status_error_v1"
     assert "not a git worktree" in payload["error"]
 
 
@@ -117,17 +117,17 @@ def test_cli_missing_git_reports_missing_tool(
             unavailable=True,
         )
 
-    monkeypatch.setattr(qstatus.git_snapshot, "run_command", fake_run_command)
+    monkeypatch.setattr(quick_status.git_snapshot, "run_command", fake_run_command)
 
     assert main(["repo", "--cwd", str(tmp_path), "--json"]) == 2
 
     payload = json.loads(capsys.readouterr().out)
-    assert payload["schema_version"] == "qstatus_error_v1"
+    assert payload["schema_version"] == "quick_status_error_v1"
     assert payload["error"] == "git is not installed or not on PATH"
 
 
 def test_cli_env_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """Emit ANSI-free JSON for qstatus env."""
+    """Emit ANSI-free JSON for quick_status env."""
     (tmp_path / "pyproject.toml").write_text(
         '[project]\nname = "example"\nrequires-python = ">=3.11"\n',
     )
@@ -137,7 +137,7 @@ def test_cli_env_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> Non
     output = capsys.readouterr().out
     assert "\033[" not in output
     payload = json.loads(output)
-    assert payload["schema_version"] == "qstatus_env_snapshot_v1"
+    assert payload["schema_version"] == "quick_status_env_snapshot_v1"
     assert payload["project"]["name"] == "example"
 
 
@@ -351,7 +351,7 @@ def test_cli_repo_worktrees_github_streams_local_section(
         )
 
     monkeypatch.setattr(
-        qstatus.cli,
+        quick_status.cli,
         "collect_github_context",
         fake_collect_github_context,
     )
@@ -478,7 +478,7 @@ def test_cli_json_never_emits_color(
 
     output = capsys.readouterr().out
     assert "\033[" not in output
-    assert json.loads(output)["schema_version"] == "qstatus_repo_snapshot_v1"
+    assert json.loads(output)["schema_version"] == "quick_status_repo_snapshot_v1"
 
 
 def test_cli_github_human_prints_local_section_before_github(
@@ -511,7 +511,7 @@ def test_cli_github_human_prints_local_section_before_github(
         )
 
     monkeypatch.setattr(
-        qstatus.cli,
+        quick_status.cli,
         "collect_github_context",
         fake_collect_github_context,
     )

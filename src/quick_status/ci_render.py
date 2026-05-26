@@ -1,14 +1,14 @@
-"""Human and JSON renderers for qstatus CI snapshots."""
+"""Human and JSON renderers for quick_status CI snapshots."""
 
 from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING
 
-from qstatus import formatting as fmt
+from quick_status import formatting as fmt
 
 if TYPE_CHECKING:
-    from qstatus.ci_models import CiJob, CiRun, CiSnapshot
+    from quick_status.ci_models import CiJob, CiRun, CiSnapshot
 
 
 def render_ci_json(snapshot: CiSnapshot, *, verbose: bool = False) -> str:

@@ -1,11 +1,11 @@
-"""Tests for qstatus environment snapshots."""
+"""Tests for quick_status environment snapshots."""
 
 from __future__ import annotations
 
 import stat
 from typing import TYPE_CHECKING
 
-from qstatus.env_snapshot import collect_env_snapshot
+from quick_status.env_snapshot import collect_env_snapshot
 
 if TYPE_CHECKING:
     from pathlib import Path

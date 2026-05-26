@@ -1,4 +1,4 @@
-"""Environment snapshot collection for qstatus."""
+"""Environment snapshot collection for quick_status."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from qstatus.commands import run_command
-from qstatus.models import (
+from quick_status.commands import run_command
+from quick_status.models import (
     ENV_SCHEMA_VERSION,
     CommandRecord,
     DevpyProject,

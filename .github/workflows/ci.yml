@@ -105,8 +105,8 @@ jobs:
 
       - name: Smoke test installed package
         run: |
-          python -c "import qstatus; print(qstatus.__version__)"
-          qstatus --version
+          python -c "import quick_status; print(quick_status.__version__)"
+          quick-status --version
 
   package-uv:
     name: Package Build (uv)
@@ -137,5 +137,5 @@ jobs:
 
       - name: Smoke test installed package
         run: |
-          uv run --no-sync python -c "import qstatus; print(qstatus.__version__)"
-          uv run --no-sync qstatus --version
+          uv run --no-sync python -c "import quick_status; print(quick_status.__version__)"
+          uv run --no-sync quick-status --version

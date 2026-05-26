@@ -1,14 +1,14 @@
-"""Human and JSON renderers for qstatus repository snapshots."""
+"""Human and JSON renderers for quick_status repository snapshots."""
 
 from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING
 
-from qstatus import formatting as fmt
+from quick_status import formatting as fmt
 
 if TYPE_CHECKING:
-    from qstatus.models import (
+    from quick_status.models import (
         RemoteInfo,
         RepoSnapshot,
         StashEntry,

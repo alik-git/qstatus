@@ -1,4 +1,4 @@
-"""Safe subprocess helpers for qstatus."""
+"""Safe subprocess helpers for quick_status."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import subprocess
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from qstatus.models import CommandRecord
+from quick_status.models import CommandRecord
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

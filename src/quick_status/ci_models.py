@@ -1,4 +1,4 @@
-"""Data models for qstatus CI snapshots."""
+"""Data models for quick_status CI snapshots."""
 
 from __future__ import annotations
 
@@ -6,9 +6,14 @@ from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from qstatus.models import BranchState, ChangeSummary, CommandRecord, RepoIdentity
+    from quick_status.models import (
+        BranchState,
+        ChangeSummary,
+        CommandRecord,
+        RepoIdentity,
+    )
 
-CI_SCHEMA_VERSION = "qstatus_ci_snapshot_v1"
+CI_SCHEMA_VERSION = "quick_status_ci_snapshot_v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,7 +155,7 @@ class CiSummary:
 
 @dataclass(frozen=True, slots=True)
 class CiSnapshot:
-    """Full qstatus CI snapshot."""
+    """Full quick_status CI snapshot."""
 
     schema_version: str
     repo: RepoIdentity
