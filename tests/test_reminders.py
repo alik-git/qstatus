@@ -110,6 +110,26 @@ def test_reminders_codex_context_initializes_in_bash_c(tmp_path: Path) -> None:
     assert f"{REMINDER} Try: quick-status repo --plain" in result.stderr
 
 
+def test_reminders_codex_context_survives_exec_child_bash(tmp_path: Path) -> None:
+    """Exported Codex wrappers should survive an exec into the command shell."""
+    repo = _init_repo(tmp_path)
+    hook = _write_hook(tmp_path, context="codex")
+
+    result = _run_bash_command(
+        f"source {shlex.quote(str(hook))}; "
+        f"exec bash -c 'cd {shlex.quote(str(repo))}; "
+        "declare -F git >/dev/null && git status --short --branch'",
+        env={
+            "CODEX_CI": "1",
+            "CODEX_THREAD_ID": "test-thread",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "main" in result.stdout
+    assert f"{REMINDER} Try: quick-status repo --plain" in result.stderr
+
+
 def test_reminders_codex_context_requires_thread_id(tmp_path: Path) -> None:
     """CODEX_CI alone should not be enough to initialize Codex reminders."""
     hook = _write_hook(tmp_path, context="codex")
