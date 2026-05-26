@@ -37,6 +37,7 @@ quick-status ci
 quick-status ci --json
 quick-status ci --cwd /path/to/repo
 quick-status ci --log-tail 40
+quick-status reminders init bash
 quick-status --version
 ```
 
@@ -53,6 +54,28 @@ alias qs='quick-status'
 The package installs the explicit `quick-status` command; `qs` is intentionally
 left as a shell-level shortcut so it cannot silently shadow another global
 command on machines where that name is already used.
+
+## Shell Reminders
+
+Use the optional reminders integration when you want interactive Bash sessions
+to nudge habitual status commands toward the matching `quick-status` snapshot:
+
+```bash
+eval "$(quick-status reminders init bash)"
+```
+
+The command prints shell source only. It does not edit shell config files,
+invoke `quick-status`, or enable itself automatically. The generated integration
+wraps a small set of exact, status-like commands such as `git status`, selected
+`gh pr` or `gh run` checks, and environment probes such as `python3 --version`
+or `which python3`.
+
+Reminders print only after a matching command succeeds, preserve the original
+exit code, and write to stderr only when stderr is an interactive terminal. They
+skip non-interactive shells, captured stderr, failed commands, and commands
+already implemented as shell functions or aliases, so scripts and existing
+shell behavior should stay quiet. Set `QUICK_STATUS_REMINDERS=0` to disable
+reminders in a shell where the integration has already been loaded.
 
 Example human output:
 

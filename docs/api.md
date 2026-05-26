@@ -1,10 +1,12 @@
 # API
 
-`quick-status` exposes one package metadata value and three read-only CLI snapshots:
+`quick-status` exposes one package metadata value, three read-only CLI snapshots,
+and one opt-in shell integration source command:
 
 - `quick-status repo`: local Git facts, with optional GitHub enrichment
 - `quick-status env`: Python/project environment facts
 - `quick-status ci`: deeper GitHub CI facts for the current branch or PR
+- `quick-status reminders init bash`: Bash source for optional command reminders
 
 ```python
 import quick_status
@@ -29,6 +31,7 @@ quick-status env --show-all
 quick-status ci
 quick-status ci --json
 quick-status ci --log-tail 40
+quick-status reminders init bash
 quick-status --version
 ```
 
@@ -41,6 +44,10 @@ install packages, or modify the project.
 
 `quick-status ci` composes local Git facts with read-only `gh` calls. It does not
 fetch, push, rerun, cancel, watch, or open browser windows.
+
+`quick-status reminders init bash` prints Bash source for an opt-in interactive
+shell integration. It does not modify shell config files, invoke `quick-status`,
+or write JSON.
 
 ## Repo Snapshot
 
@@ -181,6 +188,24 @@ inspection or CLI argument failures.
 
 Human CI summaries include `applies_to_head=yes/no/unknown` so stale green or
 red runs are not confused with CI evidence for the current expected commit.
+
+## Shell Reminders
+
+`quick-status reminders init bash` emits source that can be loaded by Bash:
+
+```bash
+eval "$(quick-status reminders init bash)"
+```
+
+The generated source defines wrappers for a narrow set of status-oriented tools
+and arguments. Matching successful commands keep their normal stdout/stderr
+behavior, then print a reminder to stderr with the suggested `quick-status`
+command.
+
+The integration is intentionally opt-in and inert for non-interactive shells. It
+prints reminders only when stderr is a terminal, preserves the wrapped command's
+exit code, leaves existing shell functions and aliases untouched, and can be
+disabled in a loaded shell with `QUICK_STATUS_REMINDERS=0`.
 
 ## JSON And Verbose Evidence
 

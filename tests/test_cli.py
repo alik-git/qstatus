@@ -34,6 +34,7 @@ def test_cli_help_lists_commands(capsys: pytest.CaptureFixture[str]) -> None:
     assert "quick-status [repo]" in output
     assert "quick-status env" in output
     assert "quick-status ci" in output
+    assert "quick-status reminders" in output
     assert "quick-status repo --worktrees" in output
 
 
