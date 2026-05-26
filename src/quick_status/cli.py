@@ -18,6 +18,7 @@ from quick_status.env_snapshot import collect_env_snapshot
 from quick_status.git_snapshot import RepoSnapshotError, collect_repo_snapshot
 from quick_status.github import collect_github_context
 from quick_status.models import RepoSummary
+from quick_status.reminders import render_reminders_init
 from quick_status.repo_render import (
     render_repo_github_lines,
     render_repo_human,
@@ -35,6 +36,7 @@ Commands:
   quick-status [repo]       local Git/repo status
   quick-status env          Python, conda, venv, devpy, and tool status
   quick-status ci           detailed read-only GitHub CI status
+  quick-status reminders    opt-in shell reminders for habitual commands
 
 Examples:
   quick-status repo --worktrees
@@ -42,8 +44,10 @@ Examples:
   quick-status repo --github
   quick-status env --show-all
   quick-status ci --log-tail 40
+  eval "$(quick-status reminders init bash)"
 
-Run `quick-status env --help` or `quick-status ci --help` for command-specific options.
+Run `quick-status env --help`, `quick-status ci --help`, or
+`quick-status reminders --help` for command-specific options.
 """
 
 
@@ -61,6 +65,13 @@ Examples:
   quick-status ci
   quick-status ci --json
   quick-status ci --log-tail 40
+"""
+
+
+_REMINDERS_HELP_EPILOG = """\
+Examples:
+  quick-status reminders init bash
+  eval "$(quick-status reminders init bash)"
 """
 
 
@@ -245,6 +256,29 @@ def build_ci_parser(prog: str = "quick-status ci") -> argparse.ArgumentParser:
     return parser
 
 
+def build_reminders_parser(
+    prog: str = "quick-status reminders",
+) -> argparse.ArgumentParser:
+    """Build the quick-status reminders command-line parser."""
+    parser = argparse.ArgumentParser(
+        prog=prog,
+        description="Print opt-in shell integration for quick-status reminders.",
+        epilog=_REMINDERS_HELP_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    subparsers = parser.add_subparsers(dest="action", required=True)
+    init_parser = subparsers.add_parser(
+        "init",
+        help="print shell integration source",
+    )
+    init_parser.add_argument(
+        "shell",
+        choices=("bash",),
+        help="shell integration to print",
+    )
+    return parser
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the quick-status command-line interface."""
     args_list = list(sys.argv[1:] if argv is None else argv)
@@ -265,14 +299,24 @@ def main(argv: list[str] | None = None) -> int:
         prog = "quick-status ci"
         command = "ci"
         args_list = args_list[1:]
+    elif args_list[:1] == ["reminders"]:
+        prog = "quick-status reminders"
+        command = "reminders"
+        args_list = args_list[1:]
 
     if command == "env":
         parser = build_env_parser(prog)
     elif command == "ci":
         parser = build_ci_parser(prog)
+    elif command == "reminders":
+        parser = build_reminders_parser(prog)
     else:
         parser = build_repo_parser(prog)
     args = parser.parse_args(args_list)
+
+    if command == "reminders":
+        print(render_reminders_init(args.shell), end="")
+        return 0
 
     cwd = args.cwd.expanduser().resolve()
     if command == "ci":
