@@ -38,6 +38,7 @@ quick-status ci --json
 quick-status ci --cwd /path/to/repo
 quick-status ci --log-tail 40
 quick-status reminders init bash
+quick-status reminders init bash --context codex
 quick-status --version
 ```
 
@@ -76,6 +77,11 @@ skip non-interactive shells, captured stderr, failed commands, and commands
 already implemented as shell functions or aliases, so scripts and existing
 shell behavior should stay quiet. Set `QUICK_STATUS_REMINDERS=0` to disable
 reminders in a shell where the integration has already been loaded.
+
+A separate `--context codex` mode exists for tightly guarded Codex command
+tool shells. It is meant to be loaded by a small `BASH_ENV` dispatcher, not by
+normal shell startup. The generated source stays inert unless `CODEX_THREAD_ID`,
+`CODEX_CI=1`, and `BASH_EXECUTION_STRING` are all present.
 
 Example human output:
 

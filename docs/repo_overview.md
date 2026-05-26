@@ -35,8 +35,8 @@ GitHub calls must stay explicit.
 - `quick-status env --json`: stable environment JSON
 - `quick-status ci`: detailed read-only GitHub CI snapshot
 - `quick-status ci --json`: stable CI JSON
-- `quick-status reminders init bash`: opt-in Bash source for interactive command
-  reminders
+- `quick-status reminders init bash`: opt-in Bash source for command reminders,
+  with interactive and guarded Codex contexts
 
 See [API](api.md) for the command and JSON contract.
 
@@ -47,7 +47,8 @@ See [API](api.md) for the command and JSON contract.
 - `github.py`: optional GitHub facts through `gh`
 - `ci_snapshot.py`: detailed CI facts through `gh`
 - `env_snapshot.py`: Python, shell, project, `devpy`, and tool facts
-- `reminders.py`: generated shell integration source for opt-in reminders
+- `reminders.py`: resource loading and context selection for opt-in reminders
+- `shell/reminders.bash`: generated Bash integration source for reminder wrappers
 - `models.py`: dataclass snapshot schemas
 - `ci_models.py`: detailed CI snapshot schemas
 - `repo_render.py`: repo human/JSON rendering
@@ -70,7 +71,9 @@ Collectors own meaning. Renderers own presentation. The CLI should stay thin.
 - Repo output is compact by default; env output is sectioned by default.
 - `quick-status ci` can be slower than `repo --github`, but it should remain a
   factual read-only diagnostic rather than a GitHub Actions control plane.
-- Shell reminders must stay opt-in, interactive-only, and non-mutating. The
+- Shell reminders must stay opt-in and non-mutating. The default interactive
+  context must remain interactive-only and terminal-stderr-only; the Codex
+  context must stay guarded by Codex env vars and `bash -c` execution. The
   integration may suggest `quick-status`, but must not invoke it automatically.
 - No readiness classifier belongs in quick-status. Callers can judge readiness from
   the facts.

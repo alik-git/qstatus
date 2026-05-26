@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quick-status"
-version = "0.7.0"
+version = "0.8.0"
 description = "Quick local status snapshots for developer workspaces."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -38,6 +38,12 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/quick_status"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/quick_status/shell/reminders.bash" = "quick_status/shell/reminders.bash"
+
+[tool.hatch.build.targets.sdist.force-include]
+"src/quick_status/shell/reminders.bash" = "src/quick_status/shell/reminders.bash"
 
 [project.scripts]
 quick-status = "quick_status.cli:main"
