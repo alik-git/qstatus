@@ -115,10 +115,9 @@ Top-level sections:
 - `project`: detected project root, pyproject metadata, lock/config markers, and
   `.venv` presence
 - `devpy`: parsed `devpy.toml` facts when present
-- `tools`: optional tool facts for `git`, `uv`, `conda`, `devpy`, `pip`, `pip3`,
-  and `py_runner`
-- `hints`: command-shaped helper hints, such as `devpy python` and py_runner
-  overlay commands
+- `tools`: optional tool facts for `git`, `uv`, `conda`, `devpy`, `pip`, and
+  `pip3`
+- `hints`: command-shaped helper hints, such as `devpy python`
 
 Env human output is sectioned by default. Use `--compact` for the dense
 one-line-per-section summary. Optional sections are hidden by default; use

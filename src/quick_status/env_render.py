@@ -388,14 +388,6 @@ def _tool_lines(
                         abs_paths=abs_paths,
                     ),
                 ),
-                (
-                    "py_runner",
-                    _format_tool_value(
-                        tools["py_runner"],
-                        color=color,
-                        abs_paths=abs_paths,
-                    ),
-                ),
             ],
             color=color,
         ),
@@ -449,17 +441,11 @@ def _compact_tools_line(
         color=color,
         abs_paths=abs_paths,
     )
-    py_runner_value = _format_tool_value(
-        tools["py_runner"],
-        color=color,
-        abs_paths=abs_paths,
-    )
     return (
         f"{fmt.label('TOOLS', color)} "
         f"uv={uv_value} "
         f"conda={conda_value} "
-        f"devpy={devpy_value} "
-        f"py_runner={py_runner_value}"
+        f"devpy={devpy_value}"
     )
 
 

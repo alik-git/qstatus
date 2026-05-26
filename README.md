@@ -160,7 +160,7 @@ quick-status repo --color=always # force ANSI color
 
 ## Environment Snapshots
 
-Use `quick-status env` to inspect Python, conda, venv, devpy, uv, and py_runner facts
+Use `quick-status env` to inspect Python, conda, venv, devpy, and uv facts
 without activating or modifying anything:
 
 ```bash
@@ -209,16 +209,11 @@ TOOLS
   uv  ~/.local/bin/uv
   conda  ~/miniconda3/condabin/conda
   devpy  ~/.local/bin/devpy
-  py_runner  ~/.agent_files/py_runner/run
 HINTS devpy_python=devpy python
-      py_runner_overlay:
-        ~/.agent_files/py_runner/run \
-          --env mdp_shared \
-          --python .venv/bin/python
 ```
 
 `quick-status env` treats tools like `python`, `python3`, `pip`, `conda`, `devpy`,
-`uv`, and `py_runner` as optional facts. Missing tools are reported as missing
+and `uv` as optional facts. Missing tools are reported as missing
 instead of crashing the command. Human output compacts home-relative paths with
 `~`; pass `--abs-paths` when exact absolute paths are more useful. Default env
 collection is path-based and avoids slow `--version` subprocesses; use

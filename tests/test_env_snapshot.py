@@ -91,12 +91,7 @@ def test_env_snapshot_parses_devpy_without_devpy_or_conda(tmp_path: Path) -> Non
     assert snapshot.devpy.editable_count == 2
     assert snapshot.tools["conda"].status == "not_found"
     assert snapshot.tools["devpy"].status == "not_found"
-    assert snapshot.hints["py_runner_overlay"][1:5] == [
-        "--env",
-        "mdp_shared",
-        "--python",
-        ".venv/bin/python",
-    ]
+    assert snapshot.hints == {"devpy_python": ["devpy", "python"]}
 
 
 def test_env_snapshot_reports_malformed_toml_and_continues(tmp_path: Path) -> None:

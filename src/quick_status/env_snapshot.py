@@ -46,9 +46,9 @@ def collect_env_snapshot(
 ) -> EnvSnapshot:
     """Collect a read-only Python/worktree environment snapshot.
 
-    The collector treats Python, conda, devpy, uv, and py_runner as optional
-    facts. Missing tools are reported in the snapshot instead of raising, so
-    this command remains useful on minimal machines.
+    The collector treats Python, conda, devpy, and uv as optional facts.
+    Missing tools are reported in the snapshot instead of raising, so this
+    command remains useful on minimal machines.
     """
     actual_env = os.environ if env is None else env
     resolved_cwd = cwd.expanduser().resolve()
@@ -76,8 +76,6 @@ def collect_env_snapshot(
         )
         for name in ("git", "uv", "conda", "devpy", "pip", "pip3")
     }
-    tools["py_runner"] = _py_runner_fact(actual_env)
-
     project_root, root_source = _project_root(
         resolved_cwd,
         git_tool=tools["git"],
@@ -90,11 +88,7 @@ def collect_env_snapshot(
         root_source=root_source,
     )
     devpy = _devpy_project(project_root)
-    hints = _execution_hints(
-        devpy=devpy,
-        py_runner=tools["py_runner"],
-        root=project_root,
-    )
+    hints = _execution_hints(devpy=devpy)
 
     return EnvSnapshot(
         schema_version=ENV_SCHEMA_VERSION,
@@ -159,27 +153,6 @@ def _command_tool_fact(
         realpath=resolved,
         version=version[0] if version else None,
         status="ok",
-    )
-
-
-def _py_runner_fact(env: Mapping[str, str]) -> ToolFact:
-    path = shutil.which("py_runner", path=env.get("PATH"))
-    if path is None:
-        home = Path(env.get("HOME") or str(Path.home())).expanduser()
-        candidate = home / ".agent_files" / "py_runner" / "run"
-        if candidate.exists():
-            path = str(candidate)
-    if path is None:
-        return ToolFact(name="py_runner", available=False, status="not_found")
-    resolved_path = Path(path).expanduser().resolve()
-    executable = os.access(resolved_path, os.X_OK)
-    return ToolFact(
-        name="py_runner",
-        available=executable,
-        path=str(resolved_path),
-        realpath=str(resolved_path),
-        status="ok" if executable else "failed",
-        error=None if executable else "path exists but is not executable",
     )
 
 
@@ -304,27 +277,10 @@ def _devpy_project(root: Path) -> DevpyProject:
 def _execution_hints(
     *,
     devpy: DevpyProject,
-    py_runner: ToolFact,
-    root: Path,
 ) -> dict[str, list[str]]:
     if not devpy.present or devpy.status != "ok":
         return {}
-    hints: dict[str, list[str]] = {"devpy_python": ["devpy", "python"]}
-    if devpy.base_conda_env and devpy.venv_path:
-        venv_python = Path(devpy.venv_path) / "bin" / "python"
-        try:
-            python_arg = str(venv_python.relative_to(root))
-        except ValueError:
-            python_arg = str(venv_python)
-        runner = py_runner.path or "~/.agent_files/py_runner/run"
-        hints["py_runner_overlay"] = [
-            runner,
-            "--env",
-            devpy.base_conda_env,
-            "--python",
-            python_arg,
-        ]
-    return hints
+    return {"devpy_python": ["devpy", "python"]}
 
 
 def _shell_state(cwd: Path, env: Mapping[str, str]) -> ShellState:
