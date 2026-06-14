@@ -46,7 +46,7 @@ See [API](api.md) for the command and JSON contract.
 - `git_snapshot.py`: local Git facts and parsing
 - `github.py`: optional GitHub facts through `gh`
 - `ci_snapshot.py`: detailed CI facts through `gh`
-- `env_snapshot.py`: Python, shell, project, `devpy`, and tool facts
+- `env_snapshot.py`: Python, shell, project, `veneer`, and tool facts
 - `reminders.py`: resource loading and context selection for opt-in reminders
 - `shell/reminders.bash`: generated Bash integration source for reminder wrappers
 - `models.py`: dataclass snapshot schemas

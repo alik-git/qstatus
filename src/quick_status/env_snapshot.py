@@ -14,12 +14,12 @@ from quick_status.commands import run_command
 from quick_status.models import (
     ENV_SCHEMA_VERSION,
     CommandRecord,
-    DevpyProject,
     EnvSnapshot,
     ProjectEnvironment,
     PythonRuntimeInfo,
     ShellState,
     ToolFact,
+    VeneerProject,
 )
 
 if TYPE_CHECKING:
@@ -27,6 +27,8 @@ if TYPE_CHECKING:
 
 
 PROJECT_MARKERS = (
+    "veneer.toml",
+    "notuv.toml",
     "devpy.toml",
     "pyproject.toml",
     "uv.lock",
@@ -46,7 +48,7 @@ def collect_env_snapshot(
 ) -> EnvSnapshot:
     """Collect a read-only Python/worktree environment snapshot.
 
-    The collector treats Python, conda, devpy, and uv as optional facts.
+    The collector treats Python, conda, veneer, and uv as optional facts.
     Missing tools are reported in the snapshot instead of raising, so this
     command remains useful on minimal machines.
     """
@@ -72,9 +74,9 @@ def collect_env_snapshot(
             env=actual_env,
             include_commands=include_commands,
             command_records=command_records,
-            probe_version=probe_versions and name != "devpy",
+            probe_version=probe_versions and name != "veneer",
         )
-        for name in ("git", "uv", "conda", "devpy", "pip", "pip3")
+        for name in ("git", "uv", "conda", "veneer", "pip", "pip3")
     }
     project_root, root_source = _project_root(
         resolved_cwd,
@@ -87,8 +89,8 @@ def collect_env_snapshot(
         root=project_root,
         root_source=root_source,
     )
-    devpy = _devpy_project(project_root)
-    hints = _execution_hints(devpy=devpy)
+    veneer = _veneer_project(project_root)
+    hints = _execution_hints(veneer=veneer)
 
     return EnvSnapshot(
         schema_version=ENV_SCHEMA_VERSION,
@@ -96,7 +98,7 @@ def collect_env_snapshot(
         runtime=_runtime_info(),
         python_commands=python_commands,
         project=project,
-        devpy=devpy,
+        veneer=veneer,
         tools=tools,
         hints=hints,
         commands=command_records,
@@ -228,14 +230,20 @@ def _project_environment(
     )
 
 
-def _devpy_project(root: Path) -> DevpyProject:
-    path = root / "devpy.toml"
-    if not path.exists():
-        return DevpyProject(present=False)
+def _veneer_project(root: Path) -> VeneerProject:
+    # Prefer veneer.toml, then notuv.toml, then devpy.toml for backward compat.
+    path: Path | None = None
+    for candidate_name in ("veneer.toml", "notuv.toml", "devpy.toml"):
+        candidate = root / candidate_name
+        if candidate.exists():
+            path = candidate
+            break
+    if path is None:
+        return VeneerProject(present=False)
     try:
         data = _load_toml(path)
     except tomllib.TOMLDecodeError as exc:
-        return DevpyProject(
+        return VeneerProject(
             present=True,
             path=str(path),
             status="parse_error",
@@ -260,7 +268,7 @@ def _devpy_project(root: Path) -> DevpyProject:
             install_deps = install_deps_value
 
     venv_path = root / venv_name
-    return DevpyProject(
+    return VeneerProject(
         present=True,
         path=str(path),
         status="ok",
@@ -276,11 +284,11 @@ def _devpy_project(root: Path) -> DevpyProject:
 
 def _execution_hints(
     *,
-    devpy: DevpyProject,
+    veneer: VeneerProject,
 ) -> dict[str, list[str]]:
-    if not devpy.present or devpy.status != "ok":
+    if not veneer.present or veneer.status != "ok":
         return {}
-    return {"devpy_python": ["devpy", "python"]}
+    return {"veneer_python": ["veneer", "python"]}
 
 
 def _shell_state(cwd: Path, env: Mapping[str, str]) -> ShellState:

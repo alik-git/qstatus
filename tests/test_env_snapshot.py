@@ -32,7 +32,7 @@ def test_env_snapshot_reports_missing_python_present_python3(
     assert snapshot.python_commands["python3"].status == "ok"
     assert snapshot.python_commands["python3"].version is None
     assert snapshot.tools["conda"].status == "not_found"
-    assert snapshot.tools["devpy"].status == "not_found"
+    assert snapshot.tools["veneer"].status == "not_found"
 
 
 def test_env_snapshot_probes_versions_only_when_requested(tmp_path: Path) -> None:
@@ -59,11 +59,13 @@ def test_env_snapshot_probes_versions_only_when_requested(tmp_path: Path) -> Non
     assert verbose_snapshot.python_commands["python3"].version == "Python 3.11.9"
 
 
-def test_env_snapshot_parses_devpy_without_devpy_or_conda(tmp_path: Path) -> None:
-    """devpy.toml declares project intent even when devpy/conda are missing."""
+def test_env_snapshot_parses_veneer_without_veneer_binary_or_conda(
+    tmp_path: Path,
+) -> None:
+    """veneer.toml declares project intent even when veneer/conda are missing."""
     project = tmp_path / "project"
     project.mkdir()
-    (project / "devpy.toml").write_text(
+    (project / "veneer.toml").write_text(
         "\n".join(
             [
                 "[python]",
@@ -84,14 +86,58 @@ def test_env_snapshot_parses_devpy_without_devpy_or_conda(tmp_path: Path) -> Non
         env={"PATH": "", "HOME": str(tmp_path)},
     )
 
-    assert snapshot.devpy.present is True
-    assert snapshot.devpy.status == "ok"
-    assert snapshot.devpy.base_conda_env == "mdp_shared"
-    assert snapshot.devpy.venv_python_exists is True
-    assert snapshot.devpy.editable_count == 2
+    assert snapshot.veneer.present is True
+    assert snapshot.veneer.status == "ok"
+    assert snapshot.veneer.base_conda_env == "mdp_shared"
+    assert snapshot.veneer.venv_python_exists is True
+    assert snapshot.veneer.editable_count == 2
     assert snapshot.tools["conda"].status == "not_found"
-    assert snapshot.tools["devpy"].status == "not_found"
-    assert snapshot.hints == {"devpy_python": ["devpy", "python"]}
+    assert snapshot.tools["veneer"].status == "not_found"
+    assert snapshot.hints == {"veneer_python": ["veneer", "python"]}
+
+
+def test_env_snapshot_parses_legacy_devpy_toml(tmp_path: Path) -> None:
+    """devpy.toml is accepted for backward compat when no veneer.toml is present."""
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "devpy.toml").write_text(
+        "\n".join(
+            [
+                "[python]",
+                'base_conda_env = "mdp_shared"',
+                'venv = ".venv"',
+                "",
+                "[editables]",
+                'packages = ["."]',
+                "install_deps = false",
+            ],
+        ),
+    )
+
+    snapshot = collect_env_snapshot(
+        project,
+        env={"PATH": "", "HOME": str(tmp_path)},
+    )
+
+    assert snapshot.veneer.present is True
+    assert snapshot.veneer.status == "ok"
+    assert snapshot.hints == {"veneer_python": ["veneer", "python"]}
+
+
+def test_env_snapshot_veneer_toml_preferred_over_devpy_toml(tmp_path: Path) -> None:
+    """veneer.toml takes priority when both veneer.toml and devpy.toml exist."""
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "veneer.toml").write_text('[python]\nbase_conda_env = "veneer_env"\n')
+    (project / "devpy.toml").write_text('[python]\nbase_conda_env = "devpy_env"\n')
+
+    snapshot = collect_env_snapshot(
+        project,
+        env={"PATH": "", "HOME": str(tmp_path)},
+    )
+
+    assert snapshot.veneer.present is True
+    assert snapshot.veneer.base_conda_env == "veneer_env"
 
 
 def test_env_snapshot_reports_malformed_toml_and_continues(tmp_path: Path) -> None:
@@ -108,8 +154,8 @@ def test_env_snapshot_reports_malformed_toml_and_continues(tmp_path: Path) -> No
 
     assert snapshot.project.pyproject_status == "parse_error"
     assert snapshot.project.name == "project"
-    assert snapshot.devpy.present is True
-    assert snapshot.devpy.status == "parse_error"
+    assert snapshot.veneer.present is True
+    assert snapshot.veneer.status == "parse_error"
     assert snapshot.python_commands["python"].status == "not_found"
 
 

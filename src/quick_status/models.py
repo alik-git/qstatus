@@ -83,8 +83,8 @@ class ProjectEnvironment:
 
 
 @dataclass(frozen=True, slots=True)
-class DevpyProject:
-    """Facts parsed from a project's devpy.toml file."""
+class VeneerProject:
+    """Facts parsed from a project's veneer.toml (or notuv.toml / devpy.toml) file."""
 
     present: bool
     path: str | None = None
@@ -108,7 +108,7 @@ class EnvSnapshot:
     runtime: PythonRuntimeInfo
     python_commands: dict[str, ToolFact]
     project: ProjectEnvironment
-    devpy: DevpyProject
+    veneer: VeneerProject
     tools: dict[str, ToolFact]
     hints: dict[str, list[str]] = field(default_factory=dict)
     commands: list[CommandRecord] = field(default_factory=list)

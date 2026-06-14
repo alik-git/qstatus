@@ -40,7 +40,7 @@ quick-status --version
 local Git state. It does not fetch, mutate refs, run workflows, or call GitHub.
 
 `quick-status env` inspects the active shell, Python runtime, project markers,
-optional `devpy` config, and common tools. It does not activate environments,
+optional `veneer` config, and common tools. It does not activate environments,
 install packages, or modify the project.
 
 `quick-status ci` composes local Git facts with read-only `gh` calls. It does not
@@ -110,7 +110,7 @@ stashes.
   "runtime": {},
   "python_commands": {},
   "project": {},
-  "devpy": {},
+  "veneer": {},
   "tools": {},
   "hints": {}
 }
@@ -123,10 +123,10 @@ Top-level sections:
 - `python_commands`: PATH facts for `python` and `python3`
 - `project`: detected project root, pyproject metadata, lock/config markers, and
   `.venv` presence
-- `devpy`: parsed `devpy.toml` facts when present
-- `tools`: optional tool facts for `git`, `uv`, `conda`, `devpy`, `pip`, and
+- `veneer`: parsed `veneer.toml` (or `notuv.toml` / `devpy.toml`) facts when present
+- `tools`: optional tool facts for `git`, `uv`, `conda`, `veneer`, `pip`, and
   `pip3`
-- `hints`: command-shaped helper hints, such as `devpy python`
+- `hints`: command-shaped helper hints, such as `veneer python`
 
 Env human output is sectioned by default. Use `--compact` for the dense
 one-line-per-section summary. Optional sections are hidden by default; use

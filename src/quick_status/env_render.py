@@ -70,7 +70,7 @@ def render_env_sectioned_lines(
     """Render the default readable environment output."""
     shell = snapshot.shell
     project = snapshot.project
-    devpy = snapshot.devpy
+    veneer = snapshot.veneer
     python = snapshot.python_commands
     tools = snapshot.tools
     python3_path_rows, python3_scalar_rows = _python3_rows(
@@ -127,34 +127,34 @@ def render_env_sectioned_lines(
                 *_project_name_pairs(project, color=color),
                 ("pyproject", fmt.state(project.pyproject_status, color)),
                 ("uv.lock", fmt.state(fmt.yes_no(project.uv_lock), color)),
-                ("devpy", fmt.state(fmt.yes_no(devpy.present), color)),
+                ("veneer", fmt.state(fmt.yes_no(veneer.present), color)),
                 (".venv", fmt.state(fmt.yes_no(project.venv_exists), color)),
             ],
             color=color,
         ),
     )
-    if devpy.present:
+    if veneer.present:
         lines.extend(
             fmt.hybrid_section(
-                "DEVPY",
+                "VENEER",
                 path_rows=[
                     (
                         "venv",
                         fmt.path(
-                            devpy.venv_path or "missing",
+                            veneer.venv_path or "missing",
                             color,
                             abs_paths=abs_paths,
                         ),
                     ),
                 ],
                 scalar_rows=[
-                    ("base", fmt.state(devpy.base_conda_env or "missing", color)),
-                    ("status", fmt.state(devpy.status, color)),
+                    ("base", fmt.state(veneer.base_conda_env or "missing", color)),
+                    ("status", fmt.state(veneer.status, color)),
                     (
                         "venv_python",
-                        fmt.state(fmt.yes_no(devpy.venv_python_exists), color),
+                        fmt.state(fmt.yes_no(veneer.venv_python_exists), color),
                     ),
-                    ("editables", fmt.number(str(devpy.editable_count), color)),
+                    ("editables", fmt.number(str(veneer.editable_count), color)),
                 ],
                 color=color,
             ),
@@ -178,7 +178,7 @@ def render_env_compact_lines(
     """Render a dense one-line-per-section environment snapshot."""
     shell = snapshot.shell
     project = snapshot.project
-    devpy = snapshot.devpy
+    veneer = snapshot.veneer
     python = snapshot.python_commands
     tools = snapshot.tools
     runtime_path = fmt.path(snapshot.runtime.executable, color, abs_paths=abs_paths)
@@ -218,24 +218,24 @@ def render_env_compact_lines(
                 f"{_format_compact_project_name(project, color=color)}"
                 f"pyproject={fmt.state(project.pyproject_status, color)} "
                 f"uv.lock={fmt.state(fmt.yes_no(project.uv_lock), color)} "
-                f"devpy={fmt.state(fmt.yes_no(devpy.present), color)} "
+                f"veneer={fmt.state(fmt.yes_no(veneer.present), color)} "
                 f".venv={fmt.state(fmt.yes_no(project.venv_exists), color)}"
             ),
         ],
     )
-    if devpy.present:
-        devpy_venv = fmt.path(
-            devpy.venv_path or "missing",
+    if veneer.present:
+        veneer_venv = fmt.path(
+            veneer.venv_path or "missing",
             color,
             abs_paths=abs_paths,
         )
         lines.append(
-            f"{fmt.label('DEVPY', color)} "
-            f"base={fmt.state(devpy.base_conda_env or 'missing', color)} "
-            f"venv={devpy_venv} "
-            f"status={fmt.state(devpy.status, color)} "
-            f"venv_python={fmt.state(fmt.yes_no(devpy.venv_python_exists), color)} "
-            f"editables={fmt.number(str(devpy.editable_count), color)}",
+            f"{fmt.label('VENEER', color)} "
+            f"base={fmt.state(veneer.base_conda_env or 'missing', color)} "
+            f"venv={veneer_venv} "
+            f"status={fmt.state(veneer.status, color)} "
+            f"venv_python={fmt.state(fmt.yes_no(veneer.venv_python_exists), color)} "
+            f"editables={fmt.number(str(veneer.editable_count), color)}",
         )
     if show_tools:
         lines.append(_compact_tools_line(tools, color=color, abs_paths=abs_paths))
@@ -254,7 +254,7 @@ def render_env_verbose_lines(
     shell = snapshot.shell
     runtime = snapshot.runtime
     project = snapshot.project
-    devpy = snapshot.devpy
+    veneer = snapshot.veneer
 
     lines = [
         *fmt.hybrid_section(
@@ -331,15 +331,15 @@ def render_env_verbose_lines(
         lines.extend(
             fmt.notice_lines("PYPROJECT_ERROR", project.pyproject_error, color=color),
         )
-    if devpy.error:
-        lines.extend(fmt.notice_lines("DEVPY_ERROR", devpy.error, color=color))
-    if devpy.editable_paths:
+    if veneer.error:
+        lines.extend(fmt.notice_lines("VENEER_ERROR", veneer.error, color=color))
+    if veneer.editable_paths:
         lines.extend(
             [
-                fmt.label("DEVPY_EDITABLES", color),
+                fmt.label("VENEER_EDITABLES", color),
                 *[
                     f"  {fmt.path(path, color, abs_paths=abs_paths)}"
-                    for path in devpy.editable_paths
+                    for path in veneer.editable_paths
                 ],
             ],
         )
@@ -381,9 +381,9 @@ def _tool_lines(
                     ),
                 ),
                 (
-                    "devpy",
+                    "veneer",
                     _format_tool_value(
-                        tools["devpy"],
+                        tools["veneer"],
                         color=color,
                         abs_paths=abs_paths,
                     ),
@@ -436,8 +436,8 @@ def _compact_tools_line(
         color=color,
         abs_paths=abs_paths,
     )
-    devpy_value = _format_tool_value(
-        tools["devpy"],
+    veneer_value = _format_tool_value(
+        tools["veneer"],
         color=color,
         abs_paths=abs_paths,
     )
@@ -445,7 +445,7 @@ def _compact_tools_line(
         f"{fmt.label('TOOLS', color)} "
         f"uv={uv_value} "
         f"conda={conda_value} "
-        f"devpy={devpy_value}"
+        f"veneer={veneer_value}"
     )
 
 

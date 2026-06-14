@@ -189,7 +189,7 @@ quick-status repo --color=always # force ANSI color
 
 ## Environment Snapshots
 
-Use `quick-status env` to inspect Python, conda, venv, devpy (legacy; current tool is veneer), and uv facts
+Use `quick-status env` to inspect Python, conda, venv, veneer, and uv facts
 without activating or modifying anything:
 
 ```bash
@@ -216,21 +216,19 @@ PYTHON
   version=3.14.4  venv_like=yes
 PROJECT
   root  ~/Projects/quick-status
-  pyproject=ok  uv.lock=yes  devpy=no  .venv=yes
+  pyproject=ok  uv.lock=yes  veneer=no  .venv=yes
 ```
 
-Example for a `devpy`-backed worktree:
+Example for a `veneer`-backed worktree:
 
 ```text
 PROJECT
   root  ~/Projects/motion_data_processing_worktree1
-  name=motion-data-processing  pyproject=ok  uv.lock=yes  devpy=yes  .venv=yes
-DEVPY
+  name=motion-data-processing  pyproject=ok  uv.lock=yes  veneer=yes  .venv=yes
+VENEER
   venv  ~/Projects/motion_data_processing_worktree1/.venv
   base=mdp_shared  status=ok  venv_python=yes  editables=3
 ```
-
-`devpy` is a legacy tool; the current tool is `veneer`. quick-status continues to detect `devpy.toml` for backward compatibility.
 
 Use `--show-all`, `--show-tools`, `--show-hints`, or `--show-home` when you need
 those extra sections:
@@ -239,11 +237,11 @@ those extra sections:
 TOOLS
   uv  ~/.local/bin/uv
   conda  ~/miniconda3/condabin/conda
-  devpy  ~/.local/bin/devpy
-HINTS devpy_python=devpy python
+  veneer  ~/.local/bin/veneer
+HINTS veneer_python=veneer python
 ```
 
-`quick-status env` treats tools like `python`, `python3`, `pip`, `conda`, `devpy`,
+`quick-status env` treats tools like `python`, `python3`, `pip`, `conda`, `veneer`,
 and `uv` as optional facts. Missing tools are reported as missing
 instead of crashing the command. Human output compacts home-relative paths with
 `~`; pass `--abs-paths` when exact absolute paths are more useful. Default env
