@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 _REPO_HELP_EPILOG = """\
 Commands:
   quick-status [repo]       local Git/repo status
-  quick-status env          Python, conda, venv, devpy, and tool status
+  quick-status env          Python, conda, venv, veneer, and tool status
   quick-status ci           detailed read-only GitHub CI status
   quick-status reminders    opt-in shell reminders for habitual commands
 

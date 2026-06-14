@@ -33,7 +33,7 @@ def test_env_default_fast_path_budget(
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    for name in ("python", "python3", "uv", "conda", "devpy", "pip", "pip3"):
+    for name in ("python", "python3", "uv", "conda", "veneer", "pip", "pip3"):
         _slow_version_executable(bin_dir / name)
     env = {"PATH": str(bin_dir), "HOME": str(tmp_path)}
 

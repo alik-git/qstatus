@@ -171,7 +171,7 @@ def test_cli_env_human_can_show_optional_sections(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Optional env sections stay hidden unless requested."""
-    (tmp_path / "devpy.toml").write_text(
+    (tmp_path / "veneer.toml").write_text(
         '[python]\nbase_conda_env = "base"\n',
     )
 
@@ -203,7 +203,7 @@ def test_cli_env_human_show_all_enables_optional_sections(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """--show-all is a concise alias for all optional human env sections."""
-    (tmp_path / "devpy.toml").write_text(
+    (tmp_path / "veneer.toml").write_text(
         '[python]\nbase_conda_env = "base"\n',
     )
 
