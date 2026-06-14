@@ -147,7 +147,7 @@ PR:
 
 ```bash
 quick-status ci
-quick-status ci --cwd ~/Projects/worksets/devpy_work/devpy-runner
+quick-status ci --cwd ~/Projects/myproject
 quick-status ci --json
 quick-status ci --verbose
 quick-status ci --log-tail 40
@@ -189,7 +189,7 @@ quick-status repo --color=always # force ANSI color
 
 ## Environment Snapshots
 
-Use `quick-status env` to inspect Python, conda, venv, devpy, and uv facts
+Use `quick-status env` to inspect Python, conda, venv, devpy (legacy; current tool is veneer), and uv facts
 without activating or modifying anything:
 
 ```bash
@@ -229,6 +229,8 @@ DEVPY
   venv  ~/Projects/motion_data_processing_worktree1/.venv
   base=mdp_shared  status=ok  venv_python=yes  editables=3
 ```
+
+`devpy` is a legacy tool; the current tool is `veneer`. quick-status continues to detect `devpy.toml` for backward compatibility.
 
 Use `--show-all`, `--show-tools`, `--show-hints`, or `--show-home` when you need
 those extra sections:
