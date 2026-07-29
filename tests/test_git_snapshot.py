@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import TYPE_CHECKING
 
 from quick_status.commands import CommandResult, run_command
@@ -270,6 +271,47 @@ def test_collect_stashes_details_are_bounded_and_non_fatal(tmp_path: Path) -> No
     assert detailed.entries[1].branch == "feature"
     assert detailed.entries[1].file_count is None
     assert detailed.entries[1].detail_status == "unavailable"
+
+
+def test_collect_stash_details_runs_independent_probes_concurrently(
+    tmp_path: Path,
+) -> None:
+    """Independent stash file-count probes should enter the pool together."""
+    barrier = threading.Barrier(4)
+
+    def fake_git(args: list[str], *, timeout_s: float = 3.0) -> CommandResult:
+        """Return four stashes and require concurrent detail probes."""
+        del timeout_s
+        if args[:2] == ["stash", "list"]:
+            return CommandResult(
+                args=("git", *args),
+                cwd=tmp_path,
+                exit_code=0,
+                stdout="\n".join(
+                    f"stash@{{{index}}}\x1fOn main: stash {index}" for index in range(4)
+                ),
+                stderr="",
+            )
+        if args[:3] == ["stash", "show", "--name-only"]:
+            barrier.wait(timeout=1)
+            return CommandResult(
+                args=("git", *args),
+                cwd=tmp_path,
+                exit_code=0,
+                stdout="README.md\n",
+                stderr="",
+            )
+        raise AssertionError(args)
+
+    detailed = collect_stashes(
+        fake_git,
+        stash_count=4,
+        include_details=True,
+        limit=4,
+    )
+
+    assert detailed.detail_status == "available"
+    assert len(detailed.entries) == 4
 
 
 def test_collect_repo_snapshot_ahead_of_upstream(tmp_path: Path) -> None:

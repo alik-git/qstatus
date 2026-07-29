@@ -54,8 +54,7 @@ def test_ci_current_pr_success(
     head = _git(repo, "rev-parse", "HEAD")
 
     monkeypatch.setattr(
-        quick_status.ci_snapshot,
-        "run_command",
+        "quick_status.github_client.run_command",
         _fake_gh(
             head=head,
             pr_head=head,
@@ -85,6 +84,50 @@ def test_ci_current_pr_success(
     )
 
 
+def test_ci_current_pr_uses_two_primary_github_queries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Current PR CI should use one PR query and one exact-commit run query."""
+    repo = _repo(tmp_path, remote=True, branch="feature")
+    head = _git(repo, "rev-parse", "HEAD")
+    fake = _fake_gh(
+        head=head,
+        pr_head=head,
+        pr_checks=[{"bucket": "pass", "name": "Python", "workflow": "Checks"}],
+        runs=[
+            {
+                "databaseId": 101,
+                "status": "completed",
+                "conclusion": "success",
+                "headSha": head,
+            }
+        ],
+    )
+    calls: list[list[str]] = []
+
+    def recording_fake(
+        args: list[str],
+        *,
+        cwd: Path,
+        timeout_s: float,
+    ) -> CommandResult:
+        """Record and delegate one fake GitHub command."""
+        calls.append(args)
+        return fake(args, cwd=cwd, timeout_s=timeout_s)
+
+    monkeypatch.setattr(
+        "quick_status.github_client.run_command",
+        recording_fake,
+    )
+
+    quick_status.ci_snapshot.collect_ci_snapshot(repo)
+
+    assert [args[1:3] for args in calls] == [["pr", "list"], ["run", "list"]]
+    assert "--commit" in calls[1]
+    assert "--branch" not in calls[1]
+
+
 def test_ci_stale_pr_success_renders_stale_success(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -95,8 +138,7 @@ def test_ci_stale_pr_success_renders_stale_success(
     pr_head = "f" * 40
 
     monkeypatch.setattr(
-        quick_status.ci_snapshot,
-        "run_command",
+        "quick_status.github_client.run_command",
         _fake_gh(
             head=head,
             pr_head=pr_head,
@@ -134,8 +176,7 @@ def test_ci_stale_failure_marks_summary_as_not_applying_to_head(
     head = _git(repo, "rev-parse", "HEAD")
 
     monkeypatch.setattr(
-        quick_status.ci_snapshot,
-        "run_command",
+        "quick_status.github_client.run_command",
         _fake_gh(
             head=head,
             pr_head=None,
@@ -174,8 +215,7 @@ def test_ci_human_output_shows_dirty_worktree(
     (repo / "dirty.txt").write_text("not checked by CI yet\n")
 
     monkeypatch.setattr(
-        quick_status.ci_snapshot,
-        "run_command",
+        "quick_status.github_client.run_command",
         _fake_gh(
             head=head,
             pr_head=head,
@@ -210,8 +250,7 @@ def test_ci_no_pr_uses_local_head_run(
     head = _git(repo, "rev-parse", "HEAD")
 
     monkeypatch.setattr(
-        quick_status.ci_snapshot,
-        "run_command",
+        "quick_status.github_client.run_command",
         _fake_gh(
             head=head,
             pr_head=None,
@@ -247,8 +286,7 @@ def test_ci_no_pr_without_expected_run_is_absent(
     head = _git(repo, "rev-parse", "HEAD")
 
     monkeypatch.setattr(
-        quick_status.ci_snapshot,
-        "run_command",
+        "quick_status.github_client.run_command",
         _fake_gh(head=head, pr_head=None, pr_checks=[], runs=[]),
     )
 
@@ -270,8 +308,7 @@ def test_ci_cancelled_run_renders_cancelled(
     head = _git(repo, "rev-parse", "HEAD")
 
     monkeypatch.setattr(
-        quick_status.ci_snapshot,
-        "run_command",
+        "quick_status.github_client.run_command",
         _fake_gh(
             head=head,
             pr_head=None,
@@ -308,8 +345,7 @@ def test_ci_summary_ignores_stale_runs_when_current_runs_exist(
     head = _git(repo, "rev-parse", "HEAD")
 
     monkeypatch.setattr(
-        quick_status.ci_snapshot,
-        "run_command",
+        "quick_status.github_client.run_command",
         _fake_gh(
             head=head,
             pr_head=None,
@@ -358,8 +394,7 @@ def test_ci_pr_check_buckets_are_counted(
     head = _git(repo, "rev-parse", "HEAD")
 
     monkeypatch.setattr(
-        quick_status.ci_snapshot,
-        "run_command",
+        "quick_status.github_client.run_command",
         _fake_gh(
             head=head,
             pr_head=head,
@@ -380,7 +415,7 @@ def test_ci_pr_check_buckets_are_counted(
     assert snapshot.summary.total_checks == 5
     assert snapshot.summary.pass_count == 1
     assert snapshot.summary.fail_count == 1
-    assert snapshot.summary.pending_count == 1
+    assert snapshot.summary.running_count == 1
     assert snapshot.summary.skipped_count == 1
     assert snapshot.summary.cancel_count == 1
 
@@ -394,8 +429,7 @@ def test_ci_failed_run_collects_jobs_and_log_tail(
     head = _git(repo, "rev-parse", "HEAD")
 
     monkeypatch.setattr(
-        quick_status.ci_snapshot,
-        "run_command",
+        "quick_status.github_client.run_command",
         _fake_gh(
             head=head,
             pr_head=head,
@@ -442,8 +476,7 @@ def test_ci_log_tail_failure_is_data(
     head = _git(repo, "rev-parse", "HEAD")
 
     monkeypatch.setattr(
-        quick_status.ci_snapshot,
-        "run_command",
+        "quick_status.github_client.run_command",
         _fake_gh(
             head=head,
             pr_head=head,
@@ -494,7 +527,7 @@ def test_cli_ci_missing_gh_is_structured_unavailable(
             unavailable=True,
         )
 
-    monkeypatch.setattr(quick_status.ci_snapshot, "run_command", fake_run_command)
+    monkeypatch.setattr("quick_status.github_client.run_command", fake_run_command)
 
     assert main(["ci", "--cwd", str(repo), "--json"]) == 0
 
@@ -535,6 +568,8 @@ def _fake_gh(
     jobs: list[dict[str, object]] | None = None,
     log_failed: str | None = "",
 ) -> Callable[..., CommandResult]:
+    del head
+
     def fake_run_command(
         args: list[str],
         *,
@@ -542,35 +577,32 @@ def _fake_gh(
         timeout_s: float,
     ) -> CommandResult:
         del timeout_s
-        if args[:3] == ["gh", "auth", "status"]:
-            return _ok(args, cwd, "")
-        if args[:3] == ["gh", "pr", "view"]:
+        if args[:3] == ["gh", "pr", "list"]:
             if pr_head is None:
-                return _fail(args, cwd, "no pull requests found")
+                return _ok(args, cwd, json.dumps([]))
             return _ok(
                 args,
                 cwd,
                 json.dumps(
-                    {
-                        "number": 2,
-                        "title": "Test PR",
-                        "url": "https://github.com/alik-git/quick-status/pull/2",
-                        "state": "OPEN",
-                        "isDraft": False,
-                        "baseRefName": "main",
-                        "baseRefOid": "b" * 40,
-                        "headRefName": "feature",
-                        "headRefOid": pr_head,
-                        "reviewDecision": "APPROVED",
-                    }
+                    [
+                        {
+                            "number": 2,
+                            "title": "Test PR",
+                            "url": "https://github.com/alik-git/quick-status/pull/2",
+                            "state": "OPEN",
+                            "isDraft": False,
+                            "baseRefName": "main",
+                            "baseRefOid": "b" * 40,
+                            "headRefName": "feature",
+                            "headRefOid": pr_head,
+                            "reviewDecision": "APPROVED",
+                            "statusCheckRollup": [
+                                _rollup_check(check) for check in pr_checks
+                            ],
+                        }
+                    ]
                 ),
             )
-        if args[:3] == ["gh", "pr", "status"]:
-            return _ok(args, cwd, json.dumps({"createdBy": [], "needsReview": []}))
-        if args[:3] == ["gh", "pr", "list"]:
-            return _ok(args, cwd, json.dumps([]))
-        if args[:3] == ["gh", "pr", "checks"]:
-            return _ok(args, cwd, json.dumps(pr_checks))
         if args[:3] == ["gh", "run", "list"]:
             return _ok(args, cwd, json.dumps(runs))
         if args[:3] == ["gh", "run", "view"] and "--json" in args:
@@ -588,11 +620,27 @@ def _fake_gh(
             if log_failed is None:
                 return _fail(args, cwd, "log unavailable")
             return _ok(args, cwd, log_failed)
-        if args[:3] == ["git", "rev-parse", "--verify"]:
-            return _ok(args, cwd, head)
         raise AssertionError(args)
 
     return fake_run_command
+
+
+def _rollup_check(check: dict[str, object]) -> dict[str, object]:
+    """Convert a legacy PR-check fixture to a status rollup row."""
+    bucket = str(check.get("bucket") or "unknown")
+    status, conclusion = {
+        "pass": ("COMPLETED", "SUCCESS"),
+        "fail": ("COMPLETED", "FAILURE"),
+        "pending": ("IN_PROGRESS", ""),
+        "skipping": ("COMPLETED", "SKIPPED"),
+        "cancel": ("COMPLETED", "CANCELLED"),
+    }.get(bucket, ("COMPLETED", ""))
+    return {
+        "name": check.get("name") or "unknown",
+        "workflowName": check.get("workflow"),
+        "status": status,
+        "conclusion": conclusion,
+    }
 
 
 def _ok(args: list[str], cwd: Path, stdout: str) -> CommandResult:

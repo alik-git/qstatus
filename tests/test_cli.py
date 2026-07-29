@@ -32,7 +32,7 @@ def test_cli_help_lists_commands(capsys: pytest.CaptureFixture[str]) -> None:
     assert exc_info.value.code == 0
     output = capsys.readouterr().out
     assert "Commands:" in output
-    assert "quick-status [repo]" in output
+    assert "quick-status [PATH]" in output
     assert "quick-status env" in output
     assert "quick-status ci" in output
     assert "quick-status reminders" in output
@@ -94,6 +94,34 @@ def test_cli_non_repo_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -
     payload = json.loads(capsys.readouterr().out)
     assert payload["schema_version"] == "quick_status_error_v1"
     assert "not a git worktree" in payload["error"]
+
+
+def test_cli_accepts_positional_repo_path(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The documented positional repository path should be functional."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init")
+
+    assert main([str(repo), "--json"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["repo"]["root"] == str(repo)
+
+
+def test_cli_missing_cwd_reports_directory_error(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A missing working directory must not be misreported as missing Git."""
+    missing = tmp_path / "does-not-exist"
+
+    assert main(["--cwd", str(missing), "--json"]) == 2
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["error"] == f"directory does not exist: {missing}"
 
 
 def test_cli_missing_git_reports_missing_tool(
@@ -353,8 +381,7 @@ def test_cli_repo_worktrees_github_streams_local_section(
         )
 
     monkeypatch.setattr(
-        quick_status.cli,
-        "collect_github_context",
+        "quick_status.github.collect_github_context",
         fake_collect_github_context,
     )
 
@@ -513,8 +540,7 @@ def test_cli_github_human_prints_local_section_before_github(
         )
 
     monkeypatch.setattr(
-        quick_status.cli,
-        "collect_github_context",
+        "quick_status.github.collect_github_context",
         fake_collect_github_context,
     )
 

@@ -1,12 +1,16 @@
-"""Optional GitHub context collection through the `gh` CLI."""
+"""Shared GitHub PR, check, run, and release evidence collection."""
 
 from __future__ import annotations
 
-import json
 import tomllib
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
-from quick_status.commands import CommandResult, run_command
+from quick_status.github_client import (
+    GitHubClient,
+    GitHubMemoryCache,
+    JsonQueryResult,
+)
 from quick_status.models import (
     BranchState,
     CommandRecord,
@@ -14,10 +18,50 @@ from quick_status.models import (
     PullRequestInfo,
     ReleaseInfo,
     RemoteCheckSummary,
+    RepoSnapshot,
+    RepoSummary,
 )
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+_PR_FIELDS = (
+    "number,title,url,state,isDraft,baseRefName,baseRefOid,headRefName,"
+    "headRefOid,reviewDecision,statusCheckRollup"
+)
+_RUN_FIELDS = (
+    "databaseId,status,conclusion,headSha,headBranch,workflowName,"
+    "displayTitle,event,createdAt,updatedAt,url,attempt"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class PullRequestQuery:
+    """A branch PR plus its check rollup and source status."""
+
+    status: str
+    pull_request: PullRequestInfo | None
+    check_rollup: list[dict[str, Any]]
+    error: str | None = None
+
+
+def enrich_repo_snapshot(
+    snapshot: RepoSnapshot,
+    github: GitHubContext,
+    github_commands: list[CommandRecord],
+) -> RepoSnapshot:
+    """Attach shared GitHub evidence and its neutral summary to a repo snapshot."""
+    return replace(
+        snapshot,
+        github=github,
+        commands=[*snapshot.commands, *github_commands],
+        summary=RepoSummary(
+            sync_state=snapshot.summary.sync_state,
+            worktree_state=snapshot.summary.worktree_state,
+            pr_state=github.pr_state,
+            remote_check_state=github.checks.state if github.checks else "unknown",
+        ),
+    )
 
 
 def collect_github_context(
@@ -26,9 +70,13 @@ def collect_github_context(
     branch: BranchState,
     root: Path,
     include_commands: bool = False,
+    include_release: bool = False,
+    max_age_s: float = 0.0,
+    timeout_s: float = 10.0,
+    cache_dir: Path | None = None,
+    memory_cache: GitHubMemoryCache | None = None,
 ) -> tuple[GitHubContext, list[CommandRecord]]:
-    """Collect read-only GitHub PR, check, and release facts."""
-    command_records: list[CommandRecord] = []
+    """Collect read-only GitHub facts through the shared bounded query plan."""
     if not repo:
         return (
             GitHubContext(
@@ -37,214 +85,181 @@ def collect_github_context(
                 pr_state="unknown",
                 error="no GitHub remote detected",
             ),
-            command_records,
+            [],
         )
 
-    def gh(args: list[str], *, timeout_s: float = 8.0) -> CommandResult:
-        result = run_command(["gh", *args], cwd=root, timeout_s=timeout_s)
-        if include_commands:
-            command_records.append(result.evidence())
-        return result
-
-    auth_result = gh(["auth", "status"], timeout_s=5.0)
-    if auth_result.unavailable:
+    client = GitHubClient(
+        root,
+        include_commands=include_commands,
+        max_age_s=max_age_s,
+        timeout_s=timeout_s,
+        cache_dir=cache_dir,
+        memory_cache=memory_cache,
+    )
+    pr_query = query_pull_request(client, repo=repo, branch=branch)
+    if pr_query.status != "available":
+        provenance = client.provenance()
         return (
             GitHubContext(
-                status="unavailable",
+                status=pr_query.status,
                 repo=repo,
                 pr_state="unknown",
-                error="gh is not installed",
+                error=pr_query.error,
+                source=provenance.source,
+                collected_at=provenance.collected_at,
+                age_seconds=provenance.age_seconds,
             ),
-            command_records,
-        )
-    if not auth_result.ok:
-        detail = auth_result.stderr.strip() or auth_result.stdout.strip()
-        return (
-            GitHubContext(
-                status="unavailable",
-                repo=repo,
-                pr_state="unknown",
-                error=f"gh auth unavailable: {detail}",
-            ),
-            command_records,
+            client.records,
         )
 
-    pull_request = _collect_pull_request(gh, repo, branch)
-    checks = _collect_checks(gh, repo, branch, pull_request)
-    release = _collect_release(gh, repo, root)
-    pr_state = _summarize_pr_state(pull_request)
+    pull_request = pr_query.pull_request
+    error = None
+    status = "available"
+    if pull_request is not None and pull_request.state == "open":
+        checks = summarize_status_rollup(
+            pr_query.check_rollup,
+            head_sha=pull_request.head_oid,
+        )
+    else:
+        runs_query = query_workflow_runs(
+            client,
+            repo=repo,
+            commit=branch.oid,
+            branch=None,
+        )
+        if runs_query.ok:
+            runs = runs_query.data if isinstance(runs_query.data, list) else []
+            checks = summarize_workflow_runs(runs, head_sha=branch.oid)
+        else:
+            checks = RemoteCheckSummary(state="unknown", head_sha=branch.oid)
+            status = _query_failure_status(runs_query)
+            error = f"workflow-runs: {runs_query.error}"
+
+    release = None
+    if include_release:
+        release, release_error = query_release(client, repo=repo, root=root)
+        if release_error:
+            status = "partial" if status == "available" else status
+            error = _join_errors(error, release_error)
+
+    provenance = client.provenance()
     return (
         GitHubContext(
-            status="available",
+            status=status,
             repo=repo,
-            pr_state=pr_state,
+            pr_state=_summarize_pr_state(pull_request),
             pull_request=pull_request,
             checks=checks,
             release=release,
+            error=error,
+            source=provenance.source,
+            collected_at=provenance.collected_at,
+            age_seconds=provenance.age_seconds,
         ),
-        command_records,
+        client.records,
     )
 
 
-def _collect_pull_request(
-    gh,
+def query_pull_request(
+    client: GitHubClient,
+    *,
     repo: str,
     branch: BranchState,
-) -> PullRequestInfo | None:
+) -> PullRequestQuery:
+    """Query the current branch PR and check rollup in one GitHub call."""
     if branch.head in {"unknown", "(detached)"}:
-        return None
-    result = gh(
-        [
-            "pr",
-            "view",
-            branch.head,
-            "--repo",
-            repo,
-            "--json",
-            "number,title,url,state,isDraft,baseRefName,headRefName,reviewDecision",
-        ],
-    )
-    if not result.ok:
-        return _collect_pull_request_from_status(gh, repo, branch.head)
-    data = _loads_object(result.stdout)
-    if data is None:
-        return _collect_pull_request_from_status(gh, repo, branch.head)
-    return _pull_request_from_mapping(data)
-
-
-def _collect_pull_request_from_status(
-    gh,
-    repo: str,
-    branch_name: str,
-) -> PullRequestInfo | None:
-    result = gh(
-        [
-            "pr",
-            "status",
-            "--repo",
-            repo,
-            "--json",
-            "number,title,url,state,isDraft,baseRefName,headRefName,reviewDecision",
-        ],
-    )
-    if result.ok:
-        data = _loads_object(result.stdout)
-        if data is not None:
-            pull_request = _pull_request_from_status_data(data, branch_name)
-            if pull_request is not None:
-                return pull_request
-    return _collect_pull_request_from_list(gh, repo, branch_name)
-
-
-def _pull_request_from_status_data(
-    data: dict[str, Any],
-    branch_name: str,
-) -> PullRequestInfo | None:
-    for value in data.values():
-        if isinstance(value, dict) and value.get("headRefName") == branch_name:
-            return _pull_request_from_mapping(value)
-        if isinstance(value, list):
-            for item in value:
-                if isinstance(item, dict) and item.get("headRefName") == branch_name:
-                    return _pull_request_from_mapping(item)
-    return None
-
-
-def _collect_pull_request_from_list(
-    gh,
-    repo: str,
-    branch_name: str,
-) -> PullRequestInfo | None:
-    result = gh(
+        return PullRequestQuery(
+            status="available",
+            pull_request=None,
+            check_rollup=[],
+        )
+    result = client.json_list(
         [
             "pr",
             "list",
             "--repo",
             repo,
             "--head",
-            branch_name,
+            branch.head,
             "--state",
             "all",
             "--limit",
             "1",
             "--json",
-            "number,title,url,state,isDraft,baseRefName,headRefName,reviewDecision",
+            _PR_FIELDS,
         ],
     )
     if not result.ok:
-        return None
-    items = _loads_list(result.stdout)
+        status = _query_failure_status(result)
+        return PullRequestQuery(
+            status=status,
+            pull_request=None,
+            check_rollup=[],
+            error=(
+                result.error
+                if status == "unavailable"
+                else f"pull-request: {result.error}"
+            ),
+        )
+    items = result.data if isinstance(result.data, list) else []
     if not items:
-        return None
+        return PullRequestQuery(
+            status="available",
+            pull_request=None,
+            check_rollup=[],
+        )
     data = items[0]
-    return _pull_request_from_mapping(data)
-
-
-def _pull_request_from_mapping(data: dict[str, Any]) -> PullRequestInfo:
-    return PullRequestInfo(
-        number=int(data.get("number", 0)),
-        title=str(data.get("title") or ""),
-        url=str(data.get("url") or ""),
-        state=str(data.get("state") or "UNKNOWN").lower(),
-        is_draft=bool(data.get("isDraft")),
-        base_ref=_optional_str(data.get("baseRefName")),
-        head_ref=_optional_str(data.get("headRefName")),
-        review_decision=_optional_str(data.get("reviewDecision")),
+    raw_rollup = data.get("statusCheckRollup")
+    rollup = (
+        [item for item in raw_rollup if isinstance(item, dict)]
+        if isinstance(raw_rollup, list)
+        else []
+    )
+    return PullRequestQuery(
+        status="available",
+        pull_request=_pull_request_from_mapping(data),
+        check_rollup=rollup,
     )
 
 
-def _collect_checks(
-    gh,
+def query_workflow_runs(
+    client: GitHubClient,
+    *,
     repo: str,
-    branch: BranchState,
-    pull_request: PullRequestInfo | None,
-) -> RemoteCheckSummary:
-    if pull_request is not None:
-        result = gh(
-            [
-                "pr",
-                "checks",
-                str(pull_request.number),
-                "--repo",
-                repo,
-                "--json",
-                "name,state,bucket,workflow,link",
-            ],
-        )
-        if result.ok:
-            items = _loads_list(result.stdout)
-            if items is not None:
-                return summarize_pr_checks(items, head_sha=branch.oid)
-
+    commit: str | None,
+    branch: str | None,
+    limit: int = 20,
+) -> JsonQueryResult:
+    """Query workflow runs for one exact commit or branch."""
     args = [
         "run",
         "list",
         "--repo",
         repo,
         "--limit",
-        "20",
+        str(limit),
         "--json",
-        "status,conclusion,headSha,headBranch,workflowName,displayTitle,url",
+        _RUN_FIELDS,
     ]
-    if branch.head not in {"unknown", "(detached)"}:
-        args.extend(["--branch", branch.head])
-    if branch.oid:
-        args.extend(["--commit", branch.oid])
-    result = gh(args)
-    if not result.ok:
-        return RemoteCheckSummary(state="unknown", head_sha=branch.oid)
-    runs = _loads_list(result.stdout)
-    if runs is None:
-        return RemoteCheckSummary(state="unknown", head_sha=branch.oid)
-    return summarize_workflow_runs(runs, head_sha=branch.oid)
+    if commit:
+        args.extend(["--commit", commit])
+    if branch:
+        args.extend(["--branch", branch])
+    return client.json_list(args)
 
 
-def _collect_release(gh, repo: str, root: Path) -> ReleaseInfo | None:
+def query_release(
+    client: GitHubClient,
+    *,
+    repo: str,
+    root: Path,
+) -> tuple[ReleaseInfo | None, str | None]:
+    """Query the project-version release only when explicitly requested."""
     version = _read_project_version(root)
     if not version:
-        return None
+        return None, None
     tag = f"v{version}"
-    result = gh(
+    result = client.json_object(
         [
             "release",
             "view",
@@ -256,37 +271,34 @@ def _collect_release(gh, repo: str, root: Path) -> ReleaseInfo | None:
         ],
     )
     if not result.ok:
-        return ReleaseInfo(version=version, tag=tag, exists=False)
-    data = _loads_object(result.stdout)
-    if data is None:
-        return ReleaseInfo(version=version, tag=tag, exists=None)
-    return ReleaseInfo(
-        version=version,
-        tag=_optional_str(data.get("tagName")) or tag,
-        exists=True,
-        url=_optional_str(data.get("url")),
+        error = result.error or "unknown release query error"
+        if _is_missing_release(error):
+            return ReleaseInfo(version=version, tag=tag, exists=False), None
+        return (
+            ReleaseInfo(version=version, tag=tag, exists=None, error=error),
+            f"release: {error}",
+        )
+    data = result.data if isinstance(result.data, dict) else {}
+    return (
+        ReleaseInfo(
+            version=version,
+            tag=_optional_str(data.get("tagName")) or tag,
+            exists=True,
+            url=_optional_str(data.get("url")),
+        ),
+        None,
     )
 
 
-def summarize_pr_checks(
+def summarize_status_rollup(
     checks: list[dict[str, Any]],
     *,
     head_sha: str | None,
 ) -> RemoteCheckSummary:
-    """Summarize `gh pr checks --json` rows."""
+    """Summarize `statusCheckRollup` rows from a PR list query."""
     counts = _empty_counts()
     for item in checks:
-        bucket = str(item.get("bucket") or "").lower()
-        if bucket == "pass":
-            counts["success"] += 1
-        elif bucket in {"fail", "cancel"}:
-            counts["failure"] += 1
-        elif bucket == "pending":
-            counts["pending"] += 1
-        elif bucket == "skipping":
-            counts["skipped"] += 1
-        else:
-            counts["unknown"] += 1
+        counts[status_rollup_bucket(item)] += 1
     return _summary_from_counts(counts, head_sha=head_sha)
 
 
@@ -318,16 +330,55 @@ def summarize_workflow_runs(
     return _summary_from_counts(counts, head_sha=head_sha)
 
 
+def _pull_request_from_mapping(data: dict[str, Any]) -> PullRequestInfo:
+    return PullRequestInfo(
+        number=int(data.get("number", 0)),
+        title=str(data.get("title") or ""),
+        url=str(data.get("url") or ""),
+        state=str(data.get("state") or "UNKNOWN").lower(),
+        is_draft=bool(data.get("isDraft")),
+        base_ref=_optional_str(data.get("baseRefName")),
+        head_ref=_optional_str(data.get("headRefName")),
+        review_decision=_optional_str(data.get("reviewDecision")),
+        base_oid=_optional_str(data.get("baseRefOid")),
+        head_oid=_optional_str(data.get("headRefOid")),
+    )
+
+
+def status_rollup_bucket(item: dict[str, Any]) -> str:
+    """Normalize one PR status-rollup row to a summary bucket."""
+    status = str(item.get("status") or "").lower()
+    conclusion = str(item.get("conclusion") or item.get("state") or "").lower()
+    if status in {"in_progress"}:
+        return "running"
+    if status in {"queued", "pending", "requested", "waiting"}:
+        return "pending"
+    if conclusion in {"success", "neutral"}:
+        return "success" if conclusion == "success" else "skipped"
+    if conclusion in {
+        "failure",
+        "error",
+        "timed_out",
+        "cancelled",
+        "startup_failure",
+        "action_required",
+    }:
+        return "failure"
+    if conclusion in {"pending", "expected"}:
+        return "pending"
+    if conclusion == "skipped":
+        return "skipped"
+    return "unknown"
+
+
 def _summary_from_counts(
     counts: dict[str, int],
     *,
     head_sha: str | None,
 ) -> RemoteCheckSummary:
-    total = sum(counts.values())
-    state = _remote_check_state(counts)
     return RemoteCheckSummary(
-        state=state,
-        total=total,
+        state=_remote_check_state(counts),
+        total=sum(counts.values()),
         success=counts["success"],
         failure=counts["failure"],
         pending=counts["pending"],
@@ -364,15 +415,22 @@ def _remote_check_state(counts: dict[str, int]) -> str:
     return "unknown"
 
 
+def _query_failure_status(result: JsonQueryResult) -> str:
+    if result.command.unavailable:
+        return "unavailable"
+    error = (result.error or "").lower()
+    if "auth" in error or "login" in error or "not logged" in error:
+        return "unavailable"
+    return "error"
+
+
 def _summarize_pr_state(pull_request: PullRequestInfo | None) -> str:
     if pull_request is None:
         return "none"
     if pull_request.is_draft:
         return "draft"
     state = pull_request.state.lower()
-    if state in {"open", "closed", "merged"}:
-        return state
-    return "unknown"
+    return state if state in {"open", "closed", "merged"} else "unknown"
 
 
 def _read_project_version(root: Path) -> str | None:
@@ -390,22 +448,13 @@ def _read_project_version(root: Path) -> str | None:
     return version if isinstance(version, str) else None
 
 
-def _loads_object(text: str) -> dict[str, Any] | None:
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        return None
-    return data if isinstance(data, dict) else None
+def _is_missing_release(error: str) -> bool:
+    normalized = error.lower()
+    return "release not found" in normalized or "no release found" in normalized
 
 
-def _loads_list(text: str) -> list[dict[str, Any]] | None:
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(data, list):
-        return None
-    return [item for item in data if isinstance(item, dict)]
+def _join_errors(left: str | None, right: str) -> str:
+    return f"{left}; {right}" if left else right
 
 
 def _empty_counts() -> dict[str, int]:

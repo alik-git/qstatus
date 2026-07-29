@@ -10,6 +10,7 @@ if TYPE_CHECKING:
         BranchState,
         ChangeSummary,
         CommandRecord,
+        PullRequestInfo,
         RepoIdentity,
     )
 
@@ -23,22 +24,9 @@ class CiGitHubStatus:
     status: str
     repo: str | None
     error: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class CiPullRequest:
-    """Pull request facts needed for CI currentness."""
-
-    number: int
-    title: str
-    url: str
-    state: str
-    is_draft: bool
-    base_ref: str | None
-    base_oid: str | None
-    head_ref: str | None
-    head_oid: str | None
-    review_decision: str | None = None
+    source: str = "live"
+    collected_at: str | None = None
+    age_seconds: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,7 +150,7 @@ class CiSnapshot:
     branch: BranchState
     changes: ChangeSummary
     github: CiGitHubStatus
-    pull_request: CiPullRequest | None
+    pull_request: PullRequestInfo | None
     commits: CiCommitRefs
     currentness: CiCurrentness
     checks: list[CiCheck] = field(default_factory=list)

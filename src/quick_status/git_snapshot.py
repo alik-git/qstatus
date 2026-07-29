@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from quick_status.commands import CommandResult, run_command
@@ -42,8 +43,16 @@ def collect_repo_snapshot(
     include_commands: bool = False,
     include_stashes: bool = False,
     stash_limit: int = 5,
+    include_details: bool = True,
+    include_worktrees: bool | None = None,
 ) -> RepoSnapshot:
-    """Collect a read-only local Git snapshot for a repository."""
+    """Collect a read-only local Git snapshot with demand-driven details."""
+    if not cwd.exists():
+        raise RepoSnapshotError(f"directory does not exist: {cwd}")
+    if not cwd.is_dir():
+        raise RepoSnapshotError(f"not a directory: {cwd}")
+    if include_worktrees is None:
+        include_worktrees = include_details
     command_records: list[CommandRecord] = []
 
     def git(args: list[str], *, timeout_s: float = 3.0) -> CommandResult:
@@ -52,20 +61,17 @@ def collect_repo_snapshot(
             command_records.append(result.evidence())
         return result
 
-    root_result = git(["rev-parse", "--show-toplevel"])
+    root_result = git(["rev-parse", "--show-toplevel", "--absolute-git-dir"])
     if root_result.unavailable:
         raise RepoSnapshotError("git is not installed or not on PATH")
     if not root_result.ok:
         detail = root_result.stderr.strip() or root_result.stdout.strip()
         raise RepoSnapshotError(f"not a git worktree: {cwd} ({detail})")
-    root = Path(root_result.stdout.strip()).resolve()
-
-    git_dir_result = git(["rev-parse", "--git-dir"])
-    git_dir = git_dir_result.stdout.strip() if git_dir_result.ok else ""
-    if git_dir:
-        git_dir_path = Path(git_dir)
-        if not git_dir_path.is_absolute():
-            git_dir = str((root / git_dir_path).resolve())
+    identity_lines = root_result.stdout.splitlines()
+    if len(identity_lines) < 2:
+        raise RepoSnapshotError("git did not return repository identity")
+    root = Path(identity_lines[0]).resolve()
+    git_dir = str(Path(identity_lines[1]).resolve())
 
     status_result = git(["status", "--porcelain=v2", "--branch", "--show-stash"])
     if not status_result.ok:
@@ -76,10 +82,12 @@ def collect_repo_snapshot(
     remotes_result = git(["remote", "-v"])
     remotes = parse_remotes(remotes_result.stdout if remotes_result.ok else "")
 
-    commit_subject_result = git(["log", "-1", "--format=%s"])
-    commit_subject = (
-        commit_subject_result.stdout.strip() if commit_subject_result.ok else None
-    )
+    commit_subject = None
+    if include_details:
+        commit_subject_result = git(["log", "-1", "--format=%s"])
+        commit_subject = (
+            commit_subject_result.stdout.strip() if commit_subject_result.ok else None
+        )
     branch = BranchState(
         head=branch.head,
         oid=branch.oid,
@@ -88,11 +96,19 @@ def collect_repo_snapshot(
         ahead=branch.ahead,
         behind=branch.behind,
         sync_state=branch.sync_state,
+        sync_source=branch.sync_source,
         commit_subject=commit_subject,
     )
 
-    diff_result = git(["diff", "--shortstat"], timeout_s=5.0)
-    cached_diff_result = git(["diff", "--cached", "--shortstat"], timeout_s=5.0)
+    diff_shortstat = None
+    cached_diff_shortstat = None
+    if include_details:
+        diff_result = git(["diff", "--shortstat"], timeout_s=5.0)
+        cached_diff_result = git(["diff", "--cached", "--shortstat"], timeout_s=5.0)
+        diff_shortstat = diff_result.stdout.strip() if diff_result.ok else None
+        cached_diff_shortstat = (
+            cached_diff_result.stdout.strip() if cached_diff_result.ok else None
+        )
     changes = ChangeSummary(
         staged=changes.staged,
         unstaged=changes.unstaged,
@@ -101,20 +117,20 @@ def collect_repo_snapshot(
         stash_count=changes.stash_count,
         worktree_state=changes.worktree_state,
         tracked_entries=changes.tracked_entries,
-        diff_shortstat=diff_result.stdout.strip() if diff_result.ok else None,
-        cached_diff_shortstat=(
-            cached_diff_result.stdout.strip() if cached_diff_result.ok else None
-        ),
+        diff_shortstat=diff_shortstat,
+        cached_diff_shortstat=cached_diff_shortstat,
     )
 
-    worktree_result = git(["worktree", "list", "--porcelain"])
-    worktrees = (
-        parse_worktree_list(worktree_result.stdout) if worktree_result.ok else []
-    )
+    worktrees: list[WorktreeEntry] = []
+    if include_worktrees:
+        worktree_result = git(["worktree", "list", "--porcelain"])
+        worktrees = (
+            parse_worktree_list(worktree_result.stdout) if worktree_result.ok else []
+        )
     worktree = WorktreeState(
         current_path=str(root),
         worktrees=mark_current_worktree(worktrees, root),
-        count=len(worktrees),
+        count=len(worktrees) if include_worktrees else 1,
     )
 
     stashes = collect_stashes(
@@ -122,6 +138,7 @@ def collect_repo_snapshot(
         stash_count=changes.stash_count,
         include_details=include_stashes,
         limit=stash_limit,
+        parallel=not include_commands,
     )
     if stashes.count != changes.stash_count:
         changes = ChangeSummary(
@@ -176,7 +193,7 @@ def parse_porcelain_v2(output: str) -> tuple[BranchState, ChangeSummary]:
     upstream: str | None = None
     ahead: int | None = None
     behind: int | None = None
-    stash_count: int | None = None
+    stash_count: int | None = 0
     staged = 0
     unstaged = 0
     untracked = 0
@@ -243,6 +260,7 @@ def parse_porcelain_v2(output: str) -> tuple[BranchState, ChangeSummary]:
         ahead=ahead,
         behind=behind,
         sync_state=sync_state,
+        sync_source="local_tracking",
     )
     changes = ChangeSummary(
         staged=staged,
@@ -398,6 +416,7 @@ def collect_stashes(
     stash_count: int | None,
     include_details: bool,
     limit: int,
+    parallel: bool = True,
 ) -> StashState:
     """Collect bounded stash details only when explicitly requested."""
     if not include_details and stash_count is not None:
@@ -414,13 +433,29 @@ def collect_stashes(
     if limit <= 0:
         return StashState(count=count, detail_status="available")
 
+    selected = stash_lines[:limit]
+    parsed = [line.partition("\x1f") for line in selected]
+    parsed = [(ref, subject) for ref, _separator, subject in parsed if ref]
+    if not parsed:
+        return StashState(count=count, detail_status="available")
+    refs = [ref for ref, _subject in parsed]
+    if parallel and len(refs) > 1:
+        with ThreadPoolExecutor(max_workers=min(len(refs), 4)) as executor:
+            details = list(
+                executor.map(
+                    lambda ref: _stash_file_count(git_runner, ref),
+                    refs,
+                )
+            )
+    else:
+        details = [_stash_file_count(git_runner, ref) for ref in refs]
     entries: list[StashEntry] = []
     detail_status = "available"
-    for line in stash_lines[:limit]:
-        ref, _, subject = line.partition("\x1f")
-        if not ref:
-            continue
-        file_count, entry_status = _stash_file_count(git_runner, ref)
+    for (ref, subject), (file_count, entry_status) in zip(
+        parsed,
+        details,
+        strict=True,
+    ):
         if entry_status != "available":
             detail_status = "partial"
         entries.append(

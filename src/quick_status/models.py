@@ -18,6 +18,10 @@ class CommandRecord:
     timed_out: bool = False
     unavailable: bool = False
     stderr: str = ""
+    duration_ms: float = 0.0
+    source: str = "live"
+    collected_at: str | None = None
+    age_seconds: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,6 +156,7 @@ class BranchState:
     ahead: int | None
     behind: int | None
     sync_state: str
+    sync_source: str = "local_tracking"
     commit_subject: str | None = None
 
 
@@ -238,6 +243,8 @@ class PullRequestInfo:
     base_ref: str | None
     head_ref: str | None
     review_decision: str | None
+    base_oid: str | None = None
+    head_oid: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -263,6 +270,7 @@ class ReleaseInfo:
     tag: str | None
     exists: bool | None
     url: str | None = None
+    error: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -276,6 +284,9 @@ class GitHubContext:
     checks: RemoteCheckSummary | None = None
     release: ReleaseInfo | None = None
     error: str | None = None
+    source: str = "live"
+    collected_at: str | None = None
+    age_seconds: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

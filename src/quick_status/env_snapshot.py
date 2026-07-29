@@ -7,6 +7,7 @@ import platform
 import shutil
 import sys
 import tomllib
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -56,27 +57,27 @@ def collect_env_snapshot(
     resolved_cwd = cwd.expanduser().resolve()
     command_records: list[CommandRecord] = []
 
-    python_commands = {
-        name: _command_tool_fact(
-            name,
-            cwd=resolved_cwd,
-            env=actual_env,
-            include_commands=include_commands,
-            command_records=command_records,
-            probe_version=probe_versions,
-        )
-        for name in ("python", "python3")
-    }
+    specifications = [
+        ("python", probe_versions),
+        ("python3", probe_versions),
+        ("git", probe_versions),
+        ("uv", probe_versions),
+        ("conda", probe_versions),
+        ("veneer", False),
+        ("pip", probe_versions),
+        ("pip3", probe_versions),
+    ]
+    facts = _collect_tool_facts(
+        specifications,
+        cwd=resolved_cwd,
+        env=actual_env,
+        include_commands=include_commands,
+        command_records=command_records,
+        parallel=probe_versions,
+    )
+    python_commands = {name: facts[name] for name in ("python", "python3")}
     tools = {
-        name: _command_tool_fact(
-            name,
-            cwd=resolved_cwd,
-            env=actual_env,
-            include_commands=include_commands,
-            command_records=command_records,
-            probe_version=probe_versions and name != "veneer",
-        )
-        for name in ("git", "uv", "conda", "veneer", "pip", "pip3")
+        name: facts[name] for name in ("git", "uv", "conda", "veneer", "pip", "pip3")
     }
     project_root, root_source = _project_root(
         resolved_cwd,
@@ -103,6 +104,48 @@ def collect_env_snapshot(
         hints=hints,
         commands=command_records,
     )
+
+
+def _collect_tool_facts(
+    specifications: list[tuple[str, bool]],
+    *,
+    cwd: Path,
+    env: Mapping[str, str],
+    include_commands: bool,
+    command_records: list[CommandRecord],
+    parallel: bool,
+) -> dict[str, ToolFact]:
+    """Collect optional tool facts, parallelizing only explicit version probes."""
+
+    def collect(
+        specification: tuple[str, bool],
+    ) -> tuple[ToolFact, list[CommandRecord]]:
+        name, probe_version = specification
+        records: list[CommandRecord] = []
+        fact = _command_tool_fact(
+            name,
+            cwd=cwd,
+            env=env,
+            include_commands=include_commands,
+            command_records=records,
+            probe_version=probe_version,
+        )
+        return fact, records
+
+    if parallel:
+        with ThreadPoolExecutor(max_workers=len(specifications)) as executor:
+            results = list(executor.map(collect, specifications))
+    else:
+        results = [collect(specification) for specification in specifications]
+    facts: dict[str, ToolFact] = {}
+    for (name, _probe_version), (fact, records) in zip(
+        specifications,
+        results,
+        strict=True,
+    ):
+        facts[name] = fact
+        command_records.extend(records)
+    return facts
 
 
 def _command_tool_fact(

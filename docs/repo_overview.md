@@ -27,10 +27,13 @@ GitHub calls must stay explicit.
 
 - `quick-status` / `quick-status repo`: local Git status snapshot
 - `quick-status repo --github`: local Git facts plus read-only GitHub PR, CI, and
-  release facts through `gh`
+  check facts through `gh`
+- `quick-status repo --github --release`: add an explicit package release query
 - `quick-status repo --worktrees`: local Git facts plus linked worktree inventory
 - `quick-status repo --stashes`: local Git facts plus bounded stash inventory
 - `quick-status repo --json`: stable repo JSON
+- `quick-status repos ...`: bounded concurrent status for explicit repositories
+- `quick-status workset DIR`: bounded status for immediate workset repositories
 - `quick-status env`: Python/project environment snapshot
 - `quick-status env --json`: stable environment JSON
 - `quick-status ci`: detailed read-only GitHub CI snapshot
@@ -45,13 +48,16 @@ See [API](api.md) for the command and JSON contract.
 - `cli.py`: argument parsing and command orchestration
 - `git_snapshot.py`: local Git facts and parsing
 - `github.py`: optional GitHub facts through `gh`
+- `github_client.py`: deadlines, command evidence, and explicit remote caching
 - `ci_snapshot.py`: detailed CI facts through `gh`
+- `batch.py`: deterministic bounded multi-repository collection
 - `env_snapshot.py`: Python, shell, project, `veneer`, and tool facts
 - `reminders.py`: resource loading and context selection for opt-in reminders
 - `shell/reminders.bash`: generated Bash integration source for reminder wrappers
 - `models.py`: dataclass snapshot schemas
 - `ci_models.py`: detailed CI snapshot schemas
 - `repo_render.py`: repo human/JSON rendering
+- `batch_render.py`: multi-repository human/JSON rendering
 - `ci_render.py`: CI human/JSON rendering
 - `env_render.py`: environment human/JSON rendering
 - `formatting.py`: shared terminal formatting primitives
@@ -64,6 +70,11 @@ Collectors own meaning. Renderers own presentation. The CLI should stay thin.
 - Default commands must stay read-only and fast.
 - GitHub, CI, and version probes are opt-in because they can be slow or
   unavailable.
+- Local Git collection must be demand-driven; output modes should not pay for
+  undisplayed commit, diff, worktree, or stash details.
+- Remote absence, source failure, and cache freshness are separate facts.
+- Persistent remote caching is opt-in and never stores failed responses.
+- Batch discovery stays explicit or one-level workset-scoped.
 - Expanded repo-family inventories, such as linked worktrees and stash details,
   are explicit flags. The default repo command stays compact.
 - Missing optional tools are facts, not crashes.

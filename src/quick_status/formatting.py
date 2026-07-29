@@ -249,7 +249,12 @@ def command_lines(commands: list[CommandRecord], *, color: bool) -> list[str]:
     return [
         label("COMMANDS", color),
         *[
-            f"  {state(str(command_status(command)), color)}  {' '.join(command.args)}"
+            (
+                f"  {state(str(command_status(command)), color)}  "
+                f"{command.duration_ms:.1f}ms"
+                f"{f' source={command.source}' if command.source != 'live' else ''}  "
+                f"{' '.join(command.args)}"
+            )
             for command in commands
         ],
     ]
