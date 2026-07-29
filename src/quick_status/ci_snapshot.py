@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING, Any
 
 from quick_status.ci_models import (
@@ -13,13 +12,18 @@ from quick_status.ci_models import (
     CiGitHubStatus,
     CiJob,
     CiLogTail,
-    CiPullRequest,
     CiRun,
     CiSnapshot,
     CiSummary,
 )
 from quick_status.commands import CommandResult, run_command
 from quick_status.git_snapshot import collect_repo_snapshot
+from quick_status.github import (
+    query_pull_request,
+    query_workflow_runs,
+    status_rollup_bucket,
+)
+from quick_status.github_client import GitHubClient, JsonQueryResult, bounded_error
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -28,6 +32,7 @@ if TYPE_CHECKING:
         BranchState,
         ChangeSummary,
         CommandRecord,
+        PullRequestInfo,
         RepoIdentity,
     )
 
@@ -55,29 +60,30 @@ class _CommandCollector:
             self.records.append(result.evidence())
         return result
 
-    def gh(self, args: list[str], *, timeout_s: float = 8.0) -> CommandResult:
-        """Run a GitHub CLI command."""
-        return self.run(["gh", *args], timeout_s=timeout_s)
-
 
 def collect_ci_snapshot(
     cwd: Path,
     *,
     include_commands: bool = False,
     log_tail: int | None = None,
+    max_age_s: float = 0.0,
+    timeout_s: float = 15.0,
+    cache_dir: Path | None = None,
 ) -> CiSnapshot:
     """Collect read-only CI facts for the repository at cwd."""
     repo_snapshot = collect_repo_snapshot(
         cwd,
         include_github=False,
         include_commands=include_commands,
+        include_details=False,
+        include_worktrees=False,
     )
     root = cwd_for_snapshot(repo_snapshot.repo)
-    collector = _CommandCollector(root, include_commands=include_commands)
+    local_collector = _CommandCollector(root, include_commands=include_commands)
     source_errors: list[str] = []
     github_repo = repo_snapshot.repo.github_repo
     upstream_oid = _resolve_upstream_tracking_oid(
-        collector,
+        local_collector,
         repo_snapshot.branch.upstream,
     )
     if not github_repo:
@@ -111,35 +117,39 @@ def collect_ci_snapshot(
             currentness=currentness,
             summary=summary,
             source_errors=["no GitHub remote detected"],
-            commands=[*repo_snapshot.commands, *collector.records],
+            commands=[*repo_snapshot.commands, *local_collector.records],
         )
 
-    auth_result = collector.gh(["auth", "status"], timeout_s=5.0)
-    if auth_result.unavailable:
+    client = GitHubClient(
+        root,
+        include_commands=include_commands,
+        max_age_s=max_age_s,
+        timeout_s=timeout_s,
+        cache_dir=cache_dir,
+    )
+    pr_query = query_pull_request(
+        client,
+        repo=github_repo,
+        branch=repo_snapshot.branch,
+    )
+    if pr_query.status != "available":
+        provenance = client.provenance()
         return _unavailable_snapshot(
             repo_snapshot.repo,
             repo_snapshot.branch,
             repo_snapshot.changes,
-            repo_snapshot.commands,
-            collector.records,
+            [*repo_snapshot.commands, *local_collector.records],
+            client.records,
             github_repo,
             upstream_oid,
-            "gh is not installed",
-        )
-    if not auth_result.ok:
-        detail = auth_result.stderr.strip() or auth_result.stdout.strip()
-        return _unavailable_snapshot(
-            repo_snapshot.repo,
-            repo_snapshot.branch,
-            repo_snapshot.changes,
-            repo_snapshot.commands,
-            collector.records,
-            github_repo,
-            upstream_oid,
-            f"gh auth unavailable: {detail}",
+            pr_query.error or "GitHub query unavailable",
+            status=pr_query.status,
+            source=provenance.source,
+            collected_at=provenance.collected_at,
+            age_seconds=provenance.age_seconds,
         )
 
-    pull_request = _collect_pull_request(collector, github_repo, repo_snapshot.branch)
+    pull_request = pr_query.pull_request
     expected_oid, expected_source = _expected_commit(repo_snapshot.branch, pull_request)
     commits = _build_commit_refs(
         branch=repo_snapshot.branch,
@@ -150,17 +160,15 @@ def collect_ci_snapshot(
     )
 
     checks: list[CiCheck] = []
-    if pull_request is not None:
-        checks = _collect_pr_checks(
-            collector,
-            repo=github_repo,
+    if pull_request is not None and pull_request.state == "open":
+        checks = _checks_from_rollup(
+            pr_query.check_rollup,
             pull_request=pull_request,
             expected_oid=expected_oid,
-            source_errors=source_errors,
         )
 
     runs = _collect_runs(
-        collector,
+        client,
         repo=github_repo,
         branch=repo_snapshot.branch,
         expected_oid=expected_oid,
@@ -172,27 +180,37 @@ def collect_ci_snapshot(
         expected_oid=expected_oid,
         expected_source=expected_source,
         runs=runs,
+        source_errors=source_errors,
     )
     jobs = _collect_failed_jobs(
-        collector,
+        client,
         repo=github_repo,
         runs=runs,
         source_errors=source_errors,
     )
     log_tails = _collect_log_tails(
-        collector,
+        client,
         repo=github_repo,
         runs=runs,
         log_tail=log_tail,
     )
     summary = _summarize(checks, runs, currentness.state, failing_jobs=len(jobs))
+    provenance = client.provenance()
+    github_status = "partial" if source_errors else "available"
 
     return CiSnapshot(
         schema_version=CI_SCHEMA_VERSION,
         repo=repo_snapshot.repo,
         branch=repo_snapshot.branch,
         changes=repo_snapshot.changes,
-        github=CiGitHubStatus(status="available", repo=github_repo),
+        github=CiGitHubStatus(
+            status=github_status,
+            repo=github_repo,
+            error="; ".join(source_errors) if source_errors else None,
+            source=provenance.source,
+            collected_at=provenance.collected_at,
+            age_seconds=provenance.age_seconds,
+        ),
         pull_request=pull_request,
         commits=commits,
         currentness=currentness,
@@ -202,7 +220,11 @@ def collect_ci_snapshot(
         log_tails=log_tails,
         summary=summary,
         source_errors=source_errors,
-        commands=[*repo_snapshot.commands, *collector.records],
+        commands=[
+            *repo_snapshot.commands,
+            *local_collector.records,
+            *client.records,
+        ],
     )
 
 
@@ -235,6 +257,11 @@ def _unavailable_snapshot(
     github_repo: str,
     upstream_oid: str | None,
     error: str,
+    *,
+    status: str = "unavailable",
+    source: str = "live",
+    collected_at: str | None = None,
+    age_seconds: float | None = None,
 ) -> CiSnapshot:
     commits = _build_commit_refs(
         branch=branch,
@@ -256,7 +283,14 @@ def _unavailable_snapshot(
         repo=repo,
         branch=branch,
         changes=changes,
-        github=CiGitHubStatus(status="unavailable", repo=github_repo, error=error),
+        github=CiGitHubStatus(
+            status=status,
+            repo=github_repo,
+            error=error,
+            source=source,
+            collected_at=collected_at,
+            age_seconds=age_seconds,
+        ),
         pull_request=None,
         commits=commits,
         currentness=currentness,
@@ -279,104 +313,9 @@ def _resolve_upstream_tracking_oid(
     return value or None
 
 
-def _collect_pull_request(
-    collector: _CommandCollector,
-    repo: str,
-    branch: BranchState,
-) -> CiPullRequest | None:
-    if branch.head in {"unknown", "(detached)"}:
-        return None
-    fields = (
-        "number,title,url,state,isDraft,baseRefName,baseRefOid,headRefName,"
-        "headRefOid,reviewDecision,statusCheckRollup"
-    )
-    result = collector.gh(
-        [
-            "pr",
-            "view",
-            branch.head,
-            "--repo",
-            repo,
-            "--json",
-            fields,
-        ],
-    )
-    if result.ok:
-        data = _loads_object(result.stdout)
-        if data is not None:
-            return _pull_request_from_mapping(data)
-    return _collect_pull_request_from_status(collector, repo, branch.head, fields)
-
-
-def _collect_pull_request_from_status(
-    collector: _CommandCollector,
-    repo: str,
-    branch_name: str,
-    fields: str,
-) -> CiPullRequest | None:
-    result = collector.gh(["pr", "status", "--repo", repo, "--json", fields])
-    if result.ok:
-        data = _loads_object(result.stdout)
-        if data is not None:
-            pull_request = _pull_request_from_status_data(data, branch_name)
-            if pull_request is not None:
-                return pull_request
-    result = collector.gh(
-        [
-            "pr",
-            "list",
-            "--repo",
-            repo,
-            "--head",
-            branch_name,
-            "--state",
-            "all",
-            "--limit",
-            "1",
-            "--json",
-            fields,
-        ],
-    )
-    if not result.ok:
-        return None
-    items = _loads_list(result.stdout)
-    if not items:
-        return None
-    return _pull_request_from_mapping(items[0])
-
-
-def _pull_request_from_status_data(
-    data: dict[str, Any],
-    branch_name: str,
-) -> CiPullRequest | None:
-    for value in data.values():
-        if isinstance(value, dict) and value.get("headRefName") == branch_name:
-            return _pull_request_from_mapping(value)
-        if isinstance(value, list):
-            for item in value:
-                if isinstance(item, dict) and item.get("headRefName") == branch_name:
-                    return _pull_request_from_mapping(item)
-    return None
-
-
-def _pull_request_from_mapping(data: dict[str, Any]) -> CiPullRequest:
-    return CiPullRequest(
-        number=int(data.get("number", 0)),
-        title=str(data.get("title") or ""),
-        url=str(data.get("url") or ""),
-        state=str(data.get("state") or "UNKNOWN").lower(),
-        is_draft=bool(data.get("isDraft")),
-        base_ref=_optional_str(data.get("baseRefName")),
-        base_oid=_optional_str(data.get("baseRefOid")),
-        head_ref=_optional_str(data.get("headRefName")),
-        head_oid=_optional_str(data.get("headRefOid")),
-        review_decision=_optional_str(data.get("reviewDecision")),
-    )
-
-
 def _expected_commit(
     branch: BranchState,
-    pull_request: CiPullRequest | None,
+    pull_request: PullRequestInfo | None,
 ) -> tuple[str | None, str]:
     if (
         pull_request is not None
@@ -391,7 +330,7 @@ def _build_commit_refs(
     *,
     branch: BranchState,
     upstream_oid: str | None,
-    pull_request: CiPullRequest | None,
+    pull_request: PullRequestInfo | None,
     expected_oid: str | None,
     expected_source: str,
 ) -> CiCommitRefs:
@@ -411,45 +350,27 @@ def _build_commit_refs(
     )
 
 
-def _collect_pr_checks(
-    collector: _CommandCollector,
+def _checks_from_rollup(
+    items: list[dict[str, Any]],
     *,
-    repo: str,
-    pull_request: CiPullRequest,
+    pull_request: PullRequestInfo,
     expected_oid: str | None,
-    source_errors: list[str],
 ) -> list[CiCheck]:
-    result = collector.gh(
-        [
-            "pr",
-            "checks",
-            str(pull_request.number),
-            "--repo",
-            repo,
-            "--json",
-            "bucket,completedAt,description,event,link,name,startedAt,state,workflow",
-        ],
-    )
-    items = _loads_list(result.stdout)
-    if items is None:
-        if not result.ok:
-            source_errors.append(_source_error("pr-checks", result))
-        return []
     currentness = _item_currentness(pull_request.head_oid, expected_oid)
     return [
         CiCheck(
-            name=str(item.get("name") or "unknown"),
-            workflow=_optional_str(item.get("workflow")),
-            status=_optional_str(item.get("state")),
-            conclusion=_optional_str(item.get("state")),
-            bucket=_normalized_bucket(item.get("bucket")),
+            name=str(item.get("name") or item.get("context") or "unknown"),
+            workflow=_optional_str(item.get("workflowName")),
+            status=_optional_str(item.get("status") or item.get("state")),
+            conclusion=_optional_str(item.get("conclusion") or item.get("state")),
+            bucket=_ci_rollup_bucket(item),
             started_at=_optional_str(item.get("startedAt")),
             completed_at=_optional_str(item.get("completedAt")),
             event=_optional_str(item.get("event")),
-            url=_optional_str(item.get("link")),
-            details_url=_optional_str(item.get("link")),
+            url=_optional_str(item.get("detailsUrl") or item.get("targetUrl")),
+            details_url=_optional_str(item.get("detailsUrl") or item.get("targetUrl")),
             head_sha=pull_request.head_oid,
-            source="pr-checks",
+            source="pr-status-rollup",
             currentness=currentness,
         )
         for item in items
@@ -457,7 +378,7 @@ def _collect_pr_checks(
 
 
 def _collect_runs(
-    collector: _CommandCollector,
+    client: GitHubClient,
     *,
     repo: str,
     branch: BranchState,
@@ -466,24 +387,36 @@ def _collect_runs(
 ) -> list[CiRun]:
     runs_by_id: dict[int, CiRun] = {}
     if expected_oid:
+        exact = query_workflow_runs(
+            client,
+            repo=repo,
+            commit=expected_oid,
+            branch=None,
+            limit=DEFAULT_RUN_LIMIT,
+        )
         _add_runs(
             runs_by_id,
-            _run_list(
-                collector,
-                repo=repo,
-                args=["--commit", expected_oid],
+            _runs_from_query(
+                exact,
                 expected_oid=expected_oid,
+                source="run-list-commit",
                 source_errors=source_errors,
             ),
         )
-    if branch.head not in {"unknown", "(detached)"}:
+    if not runs_by_id and branch.head not in {"unknown", "(detached)"}:
+        branch_query = query_workflow_runs(
+            client,
+            repo=repo,
+            commit=None,
+            branch=branch.head,
+            limit=DEFAULT_RUN_LIMIT,
+        )
         _add_runs(
             runs_by_id,
-            _run_list(
-                collector,
-                repo=repo,
-                args=["--branch", branch.head],
+            _runs_from_query(
+                branch_query,
                 expected_oid=expected_oid,
+                source="run-list-branch",
                 source_errors=source_errors,
             ),
         )
@@ -495,37 +428,17 @@ def _collect_runs(
     return runs
 
 
-def _run_list(
-    collector: _CommandCollector,
+def _runs_from_query(
+    result: JsonQueryResult,
     *,
-    repo: str,
-    args: list[str],
     expected_oid: str | None,
+    source: str,
     source_errors: list[str],
 ) -> list[CiRun]:
-    result = collector.gh(
-        [
-            "run",
-            "list",
-            "--repo",
-            repo,
-            "--limit",
-            str(DEFAULT_RUN_LIMIT),
-            "--json",
-            (
-                "databaseId,status,conclusion,headSha,headBranch,workflowName,"
-                "displayTitle,event,createdAt,updatedAt,url,attempt"
-            ),
-            *args,
-        ],
-    )
     if not result.ok:
-        source_errors.append(_source_error("run-list", result))
+        source_errors.append(f"{source}: {result.error}")
         return []
-    items = _loads_list(result.stdout)
-    if items is None:
-        source_errors.append("run-list: invalid JSON")
-        return []
+    items = result.data if isinstance(result.data, list) else []
     return [_run_from_mapping(item, expected_oid=expected_oid) for item in items]
 
 
@@ -565,10 +478,11 @@ def _add_runs(target: dict[int, CiRun], runs: list[CiRun]) -> None:
 def _classify_currentness(
     *,
     branch: BranchState,
-    pull_request: CiPullRequest | None,
+    pull_request: PullRequestInfo | None,
     expected_oid: str | None,
     expected_source: str,
     runs: list[CiRun],
+    source_errors: list[str],
 ) -> CiCurrentness:
     if expected_source == "pr-head" and pull_request is not None:
         if _matches(branch.oid, pull_request.head_oid) is True:
@@ -605,6 +519,14 @@ def _classify_currentness(
             checked_oid=stale_run.head_sha,
             source="run-list-branch",
         )
+    if source_errors:
+        return CiCurrentness(
+            state="unknown",
+            reason="github-source-error",
+            expected_oid=expected_oid,
+            checked_oid=None,
+            source="github",
+        )
     return CiCurrentness(
         state="absent",
         reason="no-run-for-expected-sha",
@@ -615,7 +537,7 @@ def _classify_currentness(
 
 
 def _collect_failed_jobs(
-    collector: _CommandCollector,
+    client: GitHubClient,
     *,
     repo: str,
     runs: list[CiRun],
@@ -630,7 +552,7 @@ def _collect_failed_jobs(
     for run in failed_current_runs:
         if run.database_id is None:
             continue
-        result = collector.gh(
+        result = client.json_object(
             [
                 "run",
                 "view",
@@ -645,13 +567,13 @@ def _collect_failed_jobs(
             ],
         )
         if not result.ok:
-            source_errors.append(_source_error("run-view", result))
+            source_errors.append(f"run-view: {result.error}")
             continue
-        data = _loads_object(result.stdout)
-        if data is None:
-            source_errors.append("run-view: invalid JSON")
-            continue
-        for item in _jobs_from_run_data(data, run_database_id=run.database_id):
+        data = result.data if isinstance(result.data, dict) else {}
+        for item in _jobs_from_run_data(
+            data,
+            run_database_id=run.database_id,
+        ):
             if item.bucket in {"fail", "cancel"}:
                 jobs.append(item)
                 if len(jobs) >= MAX_FAILED_JOBS:
@@ -690,7 +612,7 @@ def _jobs_from_run_data(
 
 
 def _collect_log_tails(
-    collector: _CommandCollector,
+    client: GitHubClient,
     *,
     repo: str,
     runs: list[CiRun],
@@ -707,7 +629,7 @@ def _collect_log_tails(
     for run in failed_current_runs:
         if run.database_id is None:
             continue
-        result = collector.gh(
+        result = client.run(
             [
                 "run",
                 "view",
@@ -725,7 +647,7 @@ def _collect_log_tails(
                     status="unavailable",
                     requested_lines=log_tail,
                     capped=False,
-                    reason=_bounded_error(result),
+                    reason=bounded_error(result),
                 )
             )
             continue
@@ -866,19 +788,15 @@ def _bucket_for(*, status: str | None, conclusion: str | None) -> str:
     return "unknown"
 
 
-def _normalized_bucket(value: object) -> str:
-    bucket = str(value or "").lower()
-    if bucket == "pass":
-        return "pass"
-    if bucket == "fail":
-        return "fail"
-    if bucket == "pending":
-        return "pending"
-    if bucket == "skipping":
-        return "skipping"
-    if bucket == "cancel":
+def _ci_rollup_bucket(item: dict[str, Any]) -> str:
+    if str(item.get("conclusion") or "").lower() == "cancelled":
         return "cancel"
-    return "unknown"
+    bucket = status_rollup_bucket(item)
+    return {
+        "success": "pass",
+        "failure": "fail",
+        "skipped": "skipping",
+    }.get(bucket, bucket)
 
 
 def _item_currentness(item_oid: str | None, expected_oid: str | None) -> str:
@@ -893,17 +811,6 @@ def _matches(left: str | None, right: str | None) -> bool | None:
     return left == right
 
 
-def _source_error(source: str, result: CommandResult) -> str:
-    return f"{source}: {_bounded_error(result)}"
-
-
-def _bounded_error(result: CommandResult) -> str:
-    detail = result.stderr.strip() or result.stdout.strip()
-    if not detail:
-        detail = f"exit code {result.exit_code}"
-    return detail.replace("\n", " ")[:300]
-
-
 def _bucket_sort_key(bucket: str) -> int:
     order = {
         "fail": 0,
@@ -915,24 +822,6 @@ def _bucket_sort_key(bucket: str) -> int:
         "skipping": 6,
     }
     return order.get(bucket, 7)
-
-
-def _loads_object(text: str) -> dict[str, Any] | None:
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        return None
-    return data if isinstance(data, dict) else None
-
-
-def _loads_list(text: str) -> list[dict[str, Any]] | None:
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(data, list):
-        return None
-    return [item for item in data if isinstance(item, dict)]
 
 
 def _optional_str(value: object) -> str | None:

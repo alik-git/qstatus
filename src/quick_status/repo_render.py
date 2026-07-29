@@ -91,6 +91,7 @@ def render_repo_local_lines(
                 ("commit", fmt.muted(commit, color)),
                 ("upstream", fmt.state(branch.upstream or "no-upstream", color)),
                 ("sync", fmt.state(branch.sync_state, color)),
+                ("sync_source", fmt.state(branch.sync_source, color)),
                 ("ahead", fmt.number(str(branch.ahead), color)),
                 ("behind", fmt.number(str(branch.behind), color)),
             ],
@@ -134,22 +135,27 @@ def render_repo_github_lines(
         *_repo_pr_section(snapshot, color=color),
         *_repo_ci_section(snapshot, color=color),
     ]
+    if github.status != "not_requested":
+        lines.extend(_repo_evidence_section(snapshot, color=color))
     if github.release is not None:
         release = github.release
         exists = (
             "yes" if release.exists else "no" if release.exists is False else "unknown"
         )
+        release_rows = [
+            (
+                "tag",
+                fmt.name(release.tag or release.version or "unknown", color),
+            ),
+            ("exists", fmt.state(exists, color)),
+        ]
+        if release.error:
+            release_rows.append(("error", fmt.variable(release.error, color)))
         lines.extend(
             fmt.hybrid_section(
                 "RELEASE",
                 path_rows=[],
-                scalar_rows=[
-                    (
-                        "tag",
-                        fmt.name(release.tag or release.version or "unknown", color),
-                    ),
-                    ("exists", fmt.state(exists, color)),
-                ],
+                scalar_rows=release_rows,
                 color=color,
             ),
         )
@@ -220,6 +226,7 @@ def _render_repo_local_compact_lines(
             f"{fmt.label('BRANCH', color)} {fmt.name(branch.head, color)} "
             f"{fmt.muted(commit, color)} {fmt.muted(upstream, color)} "
             f"{fmt.state(branch.sync_state, color)} "
+            f"{fmt.kv('sync_source', branch.sync_source, color)} "
             f"{fmt.kv('ahead', branch.ahead, color)} "
             f"{fmt.kv('behind', branch.behind, color)}"
         ),
@@ -252,6 +259,8 @@ def _render_repo_github_compact_lines(
         f"{fmt.label('PR', color)} {_format_pr(snapshot, color=color)}",
         f"{fmt.label('CI', color)} {_format_ci(snapshot, color=color)}",
     ]
+    if github.status != "not_requested":
+        lines.append(_format_evidence(snapshot, color=color))
     if github.release is not None:
         release = github.release
         exists = (
@@ -260,7 +269,8 @@ def _render_repo_github_compact_lines(
         release_name = release.tag or release.version or "unknown"
         lines.append(
             f"{fmt.label('RELEASE', color)} {fmt.name(release_name, color)} "
-            f"exists={fmt.state(exists, color)}",
+            f"exists={fmt.state(exists, color)}"
+            f"{f' error={release.error}' if release.error else ''}",
         )
     return lines
 
@@ -289,6 +299,7 @@ def _render_repo_verbose_compact_lines(
         status = fmt.command_status(command)
         lines.append(
             f"{fmt.label('CMD', color)} {fmt.state(str(status), color)} "
+            f"{command.duration_ms:.1f}ms "
             f"{' '.join(command.args)}",
         )
     return lines
@@ -396,11 +407,11 @@ def _repo_pr_section(snapshot: RepoSnapshot, *, color: bool) -> list[str]:
             scalar_rows=[("state", fmt.state("not-requested", color))],
             color=color,
         )
-    if github.status == "unavailable":
+    if github.status in {"unavailable", "error"}:
         lines = fmt.hybrid_section(
             "PR",
             path_rows=[],
-            scalar_rows=[("state", fmt.state("unavailable", color))],
+            scalar_rows=[("state", fmt.state(github.status, color))],
             color=color,
         )
         if github.error:
@@ -440,7 +451,7 @@ def _repo_ci_section(snapshot: RepoSnapshot, *, color: bool) -> list[str]:
             scalar_rows=[("state", fmt.state("not-requested", color))],
             color=color,
         )
-    if github.status == "unavailable" or github.checks is None:
+    if github.status in {"unavailable", "error"} or github.checks is None:
         return fmt.hybrid_section(
             "CI",
             path_rows=[],
@@ -460,6 +471,21 @@ def _repo_ci_section(snapshot: RepoSnapshot, *, color: bool) -> list[str]:
             ("running", fmt.number(str(checks.running), color)),
             ("skipped", fmt.number(str(checks.skipped), color)),
             ("unknown", fmt.number(str(checks.unknown), color)),
+        ],
+        color=color,
+    )
+
+
+def _repo_evidence_section(snapshot: RepoSnapshot, *, color: bool) -> list[str]:
+    github = snapshot.github
+    age = github.age_seconds if github.age_seconds is not None else "unknown"
+    return fmt.hybrid_section(
+        "EVIDENCE",
+        path_rows=[],
+        scalar_rows=[
+            ("source", fmt.state(github.source, color)),
+            ("age_seconds", fmt.number(str(age), color)),
+            ("collected_at", fmt.optional_value(github.collected_at, color)),
         ],
         color=color,
     )
@@ -496,8 +522,8 @@ def _format_pr(snapshot: RepoSnapshot, *, color: bool) -> str:
     github = snapshot.github
     if github.status == "not_requested":
         return fmt.state("not-requested", color)
-    if github.status == "unavailable":
-        return f"{fmt.state('unavailable', color)} {github.error or ''}".strip()
+    if github.status in {"unavailable", "error"}:
+        return f"{fmt.state(github.status, color)} {github.error or ''}".strip()
     if github.pull_request is None:
         return fmt.state("none", color)
     pr = github.pull_request
@@ -512,7 +538,7 @@ def _format_ci(snapshot: RepoSnapshot, *, color: bool) -> str:
     github = snapshot.github
     if github.status == "not_requested":
         return fmt.state("not-requested", color)
-    if github.status == "unavailable":
+    if github.status in {"unavailable", "error"}:
         return fmt.state("unknown", color)
     checks = github.checks
     if checks is None:
@@ -525,6 +551,16 @@ def _format_ci(snapshot: RepoSnapshot, *, color: bool) -> str:
         f"{fmt.kv('running', checks.running, color)} "
         f"{fmt.kv('skipped', checks.skipped, color)} "
         f"{fmt.kv('unknown', checks.unknown, color)}"
+    )
+
+
+def _format_evidence(snapshot: RepoSnapshot, *, color: bool) -> str:
+    github = snapshot.github
+    age = github.age_seconds if github.age_seconds is not None else "unknown"
+    collected = github.collected_at or "unknown"
+    return (
+        f"{fmt.label('EVIDENCE', color)} source={fmt.state(github.source, color)} "
+        f"age_seconds={fmt.number(str(age), color)} collected_at={collected}"
     )
 
 

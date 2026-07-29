@@ -1,41 +1,21 @@
-"""Tests for GitHub context summarization."""
+"""Tests for shared GitHub evidence collection."""
 
 from __future__ import annotations
 
 import json
-import pathlib
 from typing import TYPE_CHECKING
 
 from quick_status.commands import CommandResult
 from quick_status.github import (
     collect_github_context,
-    summarize_pr_checks,
     summarize_workflow_runs,
 )
 from quick_status.models import BranchState
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import pytest
-
-
-def test_summarize_pr_checks_mixed_state() -> None:
-    """Summarize mixed PR checks without claiming readiness."""
-    summary = summarize_pr_checks(
-        [
-            {"bucket": "pass"},
-            {"bucket": "fail"},
-            {"bucket": "pending"},
-            {"bucket": "skipping"},
-        ],
-        head_sha="abc",
-    )
-
-    assert summary.state == "mixed"
-    assert summary.total == 4
-    assert summary.success == 1
-    assert summary.failure == 1
-    assert summary.pending == 1
-    assert summary.skipped == 1
 
 
 def test_summarize_workflow_runs_success_state() -> None:
@@ -53,62 +33,50 @@ def test_summarize_workflow_runs_success_state() -> None:
     assert summary.success == 2
 
 
-def test_collect_github_context_with_fake_gh(
-    tmp_path: pathlib.Path,
+def test_collect_github_context_uses_one_pr_rollup_query(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Collect GitHub context through fake gh JSON responses."""
-    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "0.2.0"\n')
-    branch = BranchState(
-        head="feature",
-        oid="abcdef1234567890",
-        short_oid="abcdef1",
-        upstream="origin/feature",
-        ahead=0,
-        behind=0,
-        sync_state="synced",
-    )
+    """Collect a PR and checks without auth, view, status, or checks queries."""
+    branch = _branch()
+    calls: list[list[str]] = []
 
     def fake_run_command(
         args: list[str],
         *,
-        cwd: pathlib.Path,
+        cwd: Path,
         timeout_s: float,
     ) -> CommandResult:
-        del cwd, timeout_s
-        if args[:3] == ["gh", "auth", "status"]:
-            return _ok(args, "{}")
-        if args[:3] == ["gh", "pr", "view"]:
-            return _ok(
-                args,
-                json.dumps(
-                    {
-                        "number": 12,
-                        "title": "Add repo command",
-                        "url": "https://github.com/alik-git/quick-status/pull/12",
-                        "state": "OPEN",
-                        "isDraft": False,
-                        "baseRefName": "main",
-                        "headRefName": "feature",
-                        "reviewDecision": "APPROVED",
-                    },
-                ),
-            )
-        if args[:3] == ["gh", "pr", "checks"]:
-            return _ok(args, json.dumps([{"bucket": "pass"}, {"bucket": "pass"}]))
-        if args[:3] == ["gh", "release", "view"]:
-            return _ok(
-                args,
-                json.dumps(
-                    {
-                        "tagName": "v0.2.0",
-                        "url": "https://github.com/alik-git/quick-status/releases/tag/v0.2.0",
-                    },
-                ),
-            )
-        raise AssertionError(args)
+        """Return one PR with an inline check rollup."""
+        del timeout_s
+        calls.append(args)
+        return _ok(
+            args,
+            cwd,
+            [
+                {
+                    "number": 12,
+                    "title": "Fast GitHub evidence",
+                    "url": "https://github.com/alik-git/quick-status/pull/12",
+                    "state": "OPEN",
+                    "isDraft": False,
+                    "baseRefName": "main",
+                    "baseRefOid": "b" * 40,
+                    "headRefName": "feature",
+                    "headRefOid": "a" * 40,
+                    "reviewDecision": "APPROVED",
+                    "statusCheckRollup": [
+                        {
+                            "name": "Tests",
+                            "status": "COMPLETED",
+                            "conclusion": "SUCCESS",
+                        }
+                    ],
+                }
+            ],
+        )
 
-    monkeypatch.setattr("quick_status.github.run_command", fake_run_command)
+    monkeypatch.setattr("quick_status.github_client.run_command", fake_run_command)
 
     context, commands = collect_github_context(
         repo="alik-git/quick-status",
@@ -120,202 +88,229 @@ def test_collect_github_context_with_fake_gh(
     assert context.status == "available"
     assert context.pr_state == "open"
     assert context.pull_request is not None
-    assert context.pull_request.number == 12
+    assert context.pull_request.head_oid == "a" * 40
     assert context.checks is not None
     assert context.checks.state == "success"
-    assert context.release is not None
-    assert context.release.exists is True
-    assert len(commands) == 4
+    assert context.checks.head_sha == "a" * 40
+    assert context.release is None
+    assert len(commands) == 1
+    assert len(calls) == 1
+    assert calls[0][:3] == ["gh", "pr", "list"]
 
 
-def test_collect_github_context_falls_back_to_pr_status(
-    tmp_path: pathlib.Path,
+def test_collect_github_context_no_pr_queries_exact_commit(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Find a branch PR through the structured status fallback."""
-    branch = BranchState(
-        head="feature",
-        oid="abcdef1234567890",
-        short_oid="abcdef1",
-        upstream="origin/feature",
-        ahead=0,
-        behind=0,
-        sync_state="synced",
-    )
+    """A no-PR branch should query workflow runs for the exact local OID."""
+    branch = _branch()
+    calls: list[list[str]] = []
 
     def fake_run_command(
         args: list[str],
         *,
-        cwd: pathlib.Path,
+        cwd: Path,
         timeout_s: float,
     ) -> CommandResult:
-        del cwd, timeout_s
-        if args[:3] == ["gh", "auth", "status"]:
-            return _ok(args, "{}")
-        if args[:3] == ["gh", "pr", "view"]:
-            return _fail(args, "no pull requests found")
-        if args[:3] == ["gh", "pr", "status"]:
+        """Return no PR and one successful exact-commit run."""
+        del timeout_s
+        calls.append(args)
+        if args[:3] == ["gh", "pr", "list"]:
+            return _ok(args, cwd, [])
+        if args[:3] == ["gh", "run", "list"]:
             return _ok(
                 args,
-                json.dumps(
+                cwd,
+                [
                     {
-                        "createdBy": [
-                            {
-                                "number": 7,
-                                "title": "Fallback PR",
-                                "url": "https://github.com/alik-git/quick-status/pull/7",
-                                "state": "OPEN",
-                                "isDraft": True,
-                                "baseRefName": "main",
-                                "headRefName": "feature",
-                                "reviewDecision": "",
-                            },
-                        ],
-                        "needsReview": [],
+                        "status": "completed",
+                        "conclusion": "success",
+                        "headSha": branch.oid,
                     }
-                ),
+                ],
             )
-        if args[:3] == ["gh", "pr", "checks"]:
-            return _ok(args, json.dumps([]))
-        if args[:3] == ["gh", "release", "view"]:
-            return _fail(args, "release not found")
         raise AssertionError(args)
 
-    monkeypatch.setattr("quick_status.github.run_command", fake_run_command)
+    monkeypatch.setattr("quick_status.github_client.run_command", fake_run_command)
 
-    context, _commands = collect_github_context(
+    context, _ = collect_github_context(
         repo="alik-git/quick-status",
         branch=branch,
         root=tmp_path,
     )
 
-    assert context.pr_state == "draft"
-    assert context.pull_request is not None
-    assert context.pull_request.number == 7
+    assert context.pr_state == "none"
+    assert context.checks is not None
+    assert context.checks.state == "success"
+    assert len(calls) == 2
+    assert "--commit" in calls[1]
+    assert "--branch" not in calls[1]
 
 
-def test_collect_github_context_falls_back_to_pr_list(
-    tmp_path: pathlib.Path,
+def test_collect_github_context_closed_pr_uses_current_commit_runs(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Fall back to a branch PR list when status has no branch match."""
-    branch = BranchState(
-        head="feature",
-        oid="abcdef1234567890",
-        short_oid="abcdef1",
-        upstream="origin/feature",
-        ahead=0,
-        behind=0,
-        sync_state="synced",
-    )
+    """A stale closed PR rollup must not describe the current local commit."""
+    branch = _branch()
+    calls: list[list[str]] = []
 
     def fake_run_command(
         args: list[str],
         *,
-        cwd: pathlib.Path,
+        cwd: Path,
         timeout_s: float,
     ) -> CommandResult:
-        del cwd, timeout_s
-        if args[:3] == ["gh", "auth", "status"]:
-            return _ok(args, "{}")
-        if args[:3] == ["gh", "pr", "view"]:
-            return _fail(args, "no pull requests found")
-        if args[:3] == ["gh", "pr", "status"]:
-            return _ok(args, json.dumps({"createdBy": [], "needsReview": []}))
+        """Return a failed old PR and a successful run for the current commit."""
+        del timeout_s
+        calls.append(args)
         if args[:3] == ["gh", "pr", "list"]:
             return _ok(
                 args,
-                json.dumps(
-                    [
-                        {
-                            "number": 8,
-                            "title": "List fallback PR",
-                            "url": "https://github.com/alik-git/quick-status/pull/8",
-                            "state": "OPEN",
-                            "isDraft": False,
-                            "baseRefName": "main",
-                            "headRefName": "feature",
-                            "reviewDecision": "",
-                        },
-                    ]
-                ),
+                cwd,
+                [
+                    {
+                        "number": 11,
+                        "title": "Old pull request",
+                        "url": "https://github.com/alik-git/quick-status/pull/11",
+                        "state": "CLOSED",
+                        "isDraft": False,
+                        "headRefName": "feature",
+                        "headRefOid": "0" * 40,
+                        "statusCheckRollup": [
+                            {
+                                "name": "Tests",
+                                "status": "COMPLETED",
+                                "conclusion": "FAILURE",
+                            }
+                        ],
+                    }
+                ],
             )
-        if args[:3] == ["gh", "pr", "checks"]:
-            return _ok(args, json.dumps([]))
-        if args[:3] == ["gh", "release", "view"]:
-            return _fail(args, "release not found")
+        if args[:3] == ["gh", "run", "list"]:
+            return _ok(
+                args,
+                cwd,
+                [
+                    {
+                        "status": "completed",
+                        "conclusion": "success",
+                        "headSha": branch.oid,
+                    }
+                ],
+            )
         raise AssertionError(args)
 
-    monkeypatch.setattr("quick_status.github.run_command", fake_run_command)
+    monkeypatch.setattr("quick_status.github_client.run_command", fake_run_command)
 
-    context, _commands = collect_github_context(
+    context, _ = collect_github_context(
         repo="alik-git/quick-status",
         branch=branch,
         root=tmp_path,
     )
 
-    assert context.pr_state == "open"
-    assert context.pull_request is not None
-    assert context.pull_request.number == 8
+    assert context.pr_state == "closed"
+    assert context.checks is not None
+    assert context.checks.state == "success"
+    assert context.checks.head_sha == branch.oid
+    assert len(calls) == 2
+    assert "--commit" in calls[1]
 
 
-def test_collect_github_context_reports_missing_gh(
-    tmp_path: pathlib.Path,
+def test_collect_github_context_preserves_query_failure(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Report unavailable GitHub context when gh cannot run."""
-    branch = BranchState(
-        head="feature",
-        oid="abcdef1234567890",
-        short_oid="abcdef1",
-        upstream="origin/feature",
-        ahead=0,
-        behind=0,
-        sync_state="synced",
-    )
+    """A transient PR query failure must not become a factual no-PR result."""
 
     def fake_run_command(
         args: list[str],
         *,
-        cwd: pathlib.Path,
+        cwd: Path,
         timeout_s: float,
     ) -> CommandResult:
-        del cwd, timeout_s
+        """Return a rate-limit error."""
+        del timeout_s
+        return _fail(args, cwd, "API rate limit exceeded")
+
+    monkeypatch.setattr("quick_status.github_client.run_command", fake_run_command)
+
+    context, _ = collect_github_context(
+        repo="alik-git/quick-status",
+        branch=_branch(),
+        root=tmp_path,
+    )
+
+    assert context.status == "error"
+    assert context.pr_state == "unknown"
+    assert context.pull_request is None
+    assert context.error is not None
+    assert "rate limit" in context.error
+
+
+def test_collect_github_context_reports_missing_gh(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing GitHub CLI should be structured unavailable data."""
+
+    def fake_run_command(
+        args: list[str],
+        *,
+        cwd: Path,
+        timeout_s: float,
+    ) -> CommandResult:
+        """Return a missing executable result."""
+        del timeout_s
         return CommandResult(
             args=tuple(args),
-            cwd=tmp_path,
+            cwd=cwd,
             exit_code=None,
             stdout="",
             stderr="missing gh",
             unavailable=True,
         )
 
-    monkeypatch.setattr("quick_status.github.run_command", fake_run_command)
+    monkeypatch.setattr("quick_status.github_client.run_command", fake_run_command)
 
-    context, _commands = collect_github_context(
+    context, _ = collect_github_context(
         repo="alik-git/quick-status",
-        branch=branch,
+        branch=_branch(),
         root=tmp_path,
     )
 
     assert context.status == "unavailable"
-    assert context.error == "gh is not installed"
+    assert context.pr_state == "unknown"
+    assert context.error is not None
+    assert "gh is not installed" in context.error
 
 
-def _ok(args: list[str], stdout: str) -> CommandResult:
+def _branch() -> BranchState:
+    return BranchState(
+        head="feature",
+        oid="abcdef1234567890",
+        short_oid="abcdef1",
+        upstream="origin/feature",
+        ahead=0,
+        behind=0,
+        sync_state="synced",
+    )
+
+
+def _ok(args: list[str], cwd: Path, payload: object) -> CommandResult:
     return CommandResult(
         args=tuple(args),
-        cwd=pathlib.Path.cwd(),
+        cwd=cwd,
         exit_code=0,
-        stdout=stdout,
+        stdout=json.dumps(payload),
         stderr="",
     )
 
 
-def _fail(args: list[str], stderr: str) -> CommandResult:
+def _fail(args: list[str], cwd: Path, stderr: str) -> CommandResult:
     return CommandResult(
         args=tuple(args),
-        cwd=pathlib.Path.cwd(),
+        cwd=cwd,
         exit_code=1,
         stdout="",
         stderr=stderr,

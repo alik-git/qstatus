@@ -20,9 +20,13 @@ python -m pip install -e ".[dev]"
 
 ```bash
 quick-status
+quick-status /path/to/repo
 quick-status repo
 quick-status repo --json
 quick-status repo --github
+quick-status repo --github --release
+quick-status repo --github --max-age 5
+quick-status repo --github --timeout 10
 quick-status repo --cwd /path/to/repo
 quick-status repo --verbose
 quick-status repo --plain
@@ -30,6 +34,9 @@ quick-status repo --non-compact
 quick-status repo --worktrees
 quick-status repo --stashes --stash-limit 5
 quick-status repo --color=always
+quick-status repos /path/to/repo-a /path/to/repo-b
+quick-status repos /path/to/repo-a /path/to/repo-b --github
+quick-status workset /path/to/workset
 quick-status env
 quick-status env --cwd /path/to/project
 quick-status env --json
@@ -37,6 +44,8 @@ quick-status ci
 quick-status ci --json
 quick-status ci --cwd /path/to/repo
 quick-status ci --log-tail 40
+quick-status ci --max-age 5
+quick-status ci --timeout 15
 quick-status reminders init bash
 quick-status reminders init bash --context codex
 quick-status --version
@@ -87,7 +96,7 @@ Example human output:
 
 ```text
 REPO quick-status /home/ali/Projects/quick-status
-BRANCH main 6acc81f origin/main synced ahead=0 behind=0
+BRANCH main 6acc81f origin/main synced sync_source=local_tracking ahead=0 behind=0
 STATE clean staged=0 unstaged=0 untracked=0 conflicts=0 stash=0
 REMOTE origin git@github.com:alik-git/quick-status.git
 SUBMODULES none
@@ -129,16 +138,55 @@ quick-status repo --github
 quick-status repo --json --github
 ```
 
-GitHub mode reports PR, CI/check, and package-release facts when available. If
-`gh` is missing, unauthenticated, offline, or rate-limited, the local snapshot
-still succeeds and the GitHub section is marked unavailable.
+GitHub mode reports PR and CI/check facts when available. Add `--release` when
+the project-version release is relevant; release lookup is not part of the
+normal PR/CI path. If `gh` is missing, unauthenticated, offline, or rate-limited,
+the local snapshot still succeeds and the GitHub section distinguishes
+unavailable or failed sources from a factual absent PR or run.
 
 For human output, `--github` prints and flushes the local Git facts before
-running GitHub checks, then appends PR, CI, and release facts when they are
+running GitHub checks, then appends PR and CI facts when they are
 ready. JSON output remains a single complete object printed at the end.
+
+Remote collection is live by default. `--max-age SECONDS` explicitly enables a
+successful-response cache for repeated polling:
+
+```bash
+quick-status repo --github --max-age 5
+quick-status ci --max-age 5
+```
+
+Output includes `source`, `collected_at`, and `age_seconds`; mixed live/cached
+collections are labeled `mixed`. Errors and invalid JSON are never cached.
+Cache keys include the exact `gh` query and host. Set `QUICK_STATUS_CACHE_DIR`
+to override the default `~/.cache/quick-status` location. `--timeout SECONDS`
+sets one overall GitHub deadline instead of allowing each fallback to consume a
+separate full timeout.
 
 `quick-status` reports facts and neutral summaries only. It intentionally does not
 decide whether a repo is ready to commit, push, merge, or release.
+
+## Multi-Repository Snapshots
+
+Use `repos` for an explicit repository list. Collection is concurrent, output
+order follows the input order, and the Python process is started only once:
+
+```bash
+quick-status repos ~/Projects/api ~/Projects/web
+quick-status repos ~/Projects/api ~/Projects/web --github --workers 4
+quick-status repos ~/Projects/api ~/Projects/web --json
+```
+
+Use `workset` for a shallow inventory of immediate Git repositories in a known
+workset directory:
+
+```bash
+quick-status workset ~/Projects/worksets/my-task
+```
+
+Neither command recursively searches the filesystem. A bad repository remains
+an explicit error item alongside successful results; the batch exits `2` when
+any item could not be inspected.
 
 ## CI Snapshots
 
@@ -151,6 +199,8 @@ quick-status ci --cwd ~/Projects/myproject
 quick-status ci --json
 quick-status ci --verbose
 quick-status ci --log-tail 40
+quick-status ci --max-age 5
+quick-status ci --timeout 15
 ```
 
 `quick-status ci` is read-only. It does not fetch, push, rerun workflows, cancel
@@ -245,9 +295,10 @@ HINTS veneer_python=veneer python
 and `uv` as optional facts. Missing tools are reported as missing
 instead of crashing the command. Human output compacts home-relative paths with
 `~`; pass `--abs-paths` when exact absolute paths are more useful. Default env
-collection is path-based and avoids slow `--version` subprocesses; use
-`--verbose` when you want those command records and version probes. `quick-status
-repo` still requires `git`, but reports a missing Git executable directly
+collection is path-based and avoids slow `--version` subprocesses. `--verbose`
+runs independent optional version probes concurrently and includes their timed
+command records. `quick-status repo` still requires `git`, but reports a missing
+Git executable directly
 instead of confusing it with a non-repository path.
 
 ## Development

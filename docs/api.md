@@ -1,9 +1,10 @@
 # API
 
-`quick-status` exposes one package metadata value, three read-only CLI snapshots,
+`quick-status` exposes one package metadata value, four read-only CLI snapshots,
 and one opt-in shell integration source command:
 
 - `quick-status repo`: local Git facts, with optional GitHub enrichment
+- `quick-status repos` / `workset`: bounded multi-repository facts
 - `quick-status env`: Python/project environment facts
 - `quick-status ci`: deeper GitHub CI facts for the current branch or PR
 - `quick-status reminders init bash`: Bash source for optional command reminders
@@ -18,12 +19,17 @@ print(quick_status.__version__)
 
 ```bash
 quick-status
+quick-status /path/to/repo
 quick-status repo
 quick-status repo --json
 quick-status repo --github
+quick-status repo --github --release
+quick-status repo --github --max-age 5
 quick-status repo --non-compact
 quick-status repo --worktrees
 quick-status repo --stashes --stash-limit 5
+quick-status repos /path/to/repo-a /path/to/repo-b
+quick-status workset /path/to/workset
 quick-status env
 quick-status env --json
 quick-status env --compact
@@ -31,13 +37,21 @@ quick-status env --show-all
 quick-status ci
 quick-status ci --json
 quick-status ci --log-tail 40
+quick-status ci --max-age 5
 quick-status reminders init bash
 quick-status reminders init bash --context codex
 quick-status --version
 ```
 
-`quick-status` is an alias for `quick-status repo`. The default repo command only reads
-local Git state. It does not fetch, mutate refs, run workflows, or call GitHub.
+`quick-status` is an alias for `quick-status repo`; an optional positional path
+selects the repository. The default repo command only reads local Git state. It
+does not fetch, mutate refs, run workflows, or call GitHub. Ahead/behind and
+sync values are explicitly sourced from local remote-tracking refs and do not
+imply that a fetch occurred.
+
+`quick-status repos` concurrently inspects explicit paths in one process.
+`quick-status workset` inspects only immediate Git children of an explicit
+workset directory. Neither command recursively discovers repositories.
 
 `quick-status env` inspects the active shell, Python runtime, project markers,
 optional `veneer` config, and common tools. It does not activate environments,
@@ -83,7 +97,8 @@ Top-level sections:
   `--stashes` is requested
 - `submodules`: submodule presence and clean/changed/uninitialized/conflict
   counts
-- `github`: optional `--github` PR, check, and release facts
+- `github`: optional `--github` PR/check facts and remote evidence freshness;
+  release facts appear only with `--release`
 - `summary`: neutral summary fields for sync, worktree, PR, and remote checks
 
 Repo human output is compact by default. Use `--non-compact` for the sectioned
@@ -98,6 +113,28 @@ flag adds that behavior.
 to choose the maximum number of entries. Stash detail collection uses read-only
 stash-list/show commands and never applies, drops, pops, rewrites, or ranks
 stashes.
+
+## Batch Snapshot
+
+`quick-status repos ... --json` and `quick-status workset DIR --json` emit:
+
+```json
+{
+  "schema_version": "quick_status_repo_batch_v1",
+  "items": [
+    {
+      "path": "/path/to/repo",
+      "status": "ok",
+      "duration_ms": 84.2,
+      "snapshot": {},
+      "error": null
+    }
+  ]
+}
+```
+
+Items preserve explicit input order; workset items use deterministic name
+order. Invalid targets remain error items alongside successful snapshots.
 
 ## Environment Snapshot
 
@@ -164,11 +201,12 @@ Top-level sections:
 - `branch`: current branch, local HEAD, upstream, and sync facts
 - `changes`: local worktree cleanliness so green CI is not confused with
   uncommitted local changes
-- `github`: `gh` availability/auth status and selected GitHub repo
+- `github`: `gh` availability, selected GitHub repo, and
+  `source`/`collected_at`/`age_seconds` freshness
 - `pull_request`: current branch PR facts when a PR exists
 - `commits`: local, PR, upstream tracking, and expected SHA comparisons
 - `currentness`: whether the CI evidence applies to the expected SHA
-- `checks`: PR check rows from `gh pr checks`
+- `checks`: PR check rows from the PR query's `statusCheckRollup`
 - `runs`: GitHub Actions run rows from `gh run list`
 - `jobs`: failed job rows for failed current runs
 - `log_tails`: optional bounded failed-log tails when `--log-tail` is set
@@ -220,8 +258,9 @@ The default `interactive` context keeps the terminal-only behavior above.
 JSON output is intended for tools and agents. Human formatting choices,
 including color and compact/sectioned layout, do not affect JSON.
 
-Verbose JSON includes a `commands` array with compact command evidence records.
-Command evidence is omitted by default.
+Verbose JSON includes a `commands` array with compact command evidence records,
+including `duration_ms` and remote `source`/age fields. Command evidence is
+omitted by default.
 
 ## Exit Codes
 
@@ -233,13 +272,21 @@ Command evidence is omitted by default.
 
 ## GitHub Mode
 
-`quick-status repo --github` uses read-only `gh` API calls. Missing `gh`, missing
-auth, offline errors, or rate limits do not fail the local snapshot. They
-produce `github.status = "unavailable"` with an error string.
+`quick-status repo --github` uses read-only `gh` API calls. One branch-filtered
+PR query also supplies the check rollup. With no PR, one exact-commit workflow
+query supplies check state. Missing `gh` or auth produces `unavailable`;
+timeouts, invalid JSON, offline failures, and rate limits remain explicit
+errors instead of becoming absent PRs or runs.
 
 For human output, GitHub mode prints and flushes local Git facts first, then
-appends PR, CI, and release facts after the slower GitHub calls finish. JSON
+appends PR and CI facts after the slower GitHub calls finish. JSON
 output remains one complete object printed at the end.
+
+`--release` adds an explicit project-version release lookup. `--timeout`
+provides one overall GitHub deadline. `--max-age` explicitly enables caching of
+successful JSON responses; default remote collection is live. Cached output
+includes collection time and age, transient errors are never cached, and
+`QUICK_STATUS_CACHE_DIR` can override the cache directory.
 
 `quick-status` reports facts only. It does not emit readiness labels or next-action
 recommendations.

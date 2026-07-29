@@ -42,7 +42,7 @@ def render_ci_human(
         lines.append(
             f"{fmt.label('GITHUB', color)} "
             f"{fmt.state(snapshot.github.status, color)} "
-            f"reason={snapshot.github.error}"
+            f"source={snapshot.github.source} reason={snapshot.github.error}"
         )
     if snapshot.source_errors:
         lines.extend(
@@ -57,7 +57,15 @@ def render_ci_human(
 def _ci_line(snapshot: CiSnapshot, *, color: bool) -> str:
     repo_name = fmt.name(snapshot.repo.name, color)
     github_repo = snapshot.github.repo or snapshot.repo.github_repo or "-"
-    return f"{fmt.label('CI', color)} {repo_name} {github_repo}"
+    age = (
+        str(snapshot.github.age_seconds)
+        if snapshot.github.age_seconds is not None
+        else "unknown"
+    )
+    return (
+        f"{fmt.label('CI', color)} {repo_name} {github_repo} "
+        f"source={snapshot.github.source} age_seconds={age}"
+    )
 
 
 def _branch_line(snapshot: CiSnapshot, *, color: bool) -> str:
